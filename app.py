@@ -6,7 +6,7 @@ from pricing_model import run_pricing_model
 # Page config
 st.set_page_config(page_title="Pricing Model", page_icon="💰", layout="wide")
 
-st.title("💰 Quick Commerce Pricing Model")
+st.title("💰 Pricing Model")
 st.write("Upload your COGS and Stock data to get pricing recommendations")
 
 # Create two columns for file uploaders
@@ -92,4 +92,5 @@ with st.expander("ℹ️ How to use this tool"):
     - **Low stock** (< 50 units): 40% markup
     - **Medium stock** (50-200 units): 30% markup
     - **High stock** (> 200 units): 20% markup
+
     """)
