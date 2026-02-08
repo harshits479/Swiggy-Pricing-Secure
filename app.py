@@ -72,8 +72,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # Initialize session state
-if 'uploaded_files' not in st.session_state:
-    st.session_state.uploaded_files = {}
 if 'results_df' not in st.session_state:
     st.session_state.results_df = None
 if 'model_run' not in st.session_state:
@@ -104,6 +102,88 @@ with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=Fa
         - High stock (> 200): 20% markup
         """)
 
+# ==================== FILE UPLOADS ====================
+
+# Dictionary to store uploaded files (using file uploaders directly)
+uploaded_files = {}
+
+# Scraped Data Inputs
+st.markdown('<div class="upload-card"><div class="section-title">📥 Scraped Data Inputs</div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.caption("**IM Prices**")
+    im_prices = st.file_uploader("IM", type=['csv'], key="im_prices", label_visibility="collapsed")
+    if im_prices:
+        uploaded_files['im_prices'] = pd.read_csv(im_prices)
+        st.success(f"✓ {len(uploaded_files['im_prices']):,} rows")
+
+with col2:
+    st.caption("**Competition Prices**")
+    comp_prices = st.file_uploader("Comp", type=['csv'], key="comp_prices", label_visibility="collapsed")
+    if comp_prices:
+        uploaded_files['comp_prices'] = pd.read_csv(comp_prices)
+        st.success(f"✓ {len(uploaded_files['comp_prices']):,} rows")
+
+with col3:
+    st.caption("**NECC Prices**")
+    necc_prices = st.file_uploader("NECC", type=['csv'], key="necc_prices", label_visibility="collapsed")
+    if necc_prices:
+        uploaded_files['necc_prices'] = pd.read_csv(necc_prices)
+        st.success(f"✓ {len(uploaded_files['necc_prices']):,} rows")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Computation Inputs
+st.markdown('<div class="upload-card"><div class="section-title">🧮 Computation Inputs</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.caption("**Sales Data**")
+    sales_file = st.file_uploader("Sales", type=['csv'], key="sales", label_visibility="collapsed")
+    if sales_file:
+        uploaded_files['sales'] = pd.read_csv(sales_file)
+        st.success(f"✓ {len(uploaded_files['sales']):,} rows")
+
+with col2:
+    st.caption("**Stocks Data** _(product_id, stock_level)_")
+    stocks_file = st.file_uploader("Stocks", type=['csv'], key="stocks", label_visibility="collapsed")
+    if stocks_file:
+        uploaded_files['stocks'] = pd.read_csv(stocks_file)
+        st.success(f"✓ {len(uploaded_files['stocks']):,} rows")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Static Inputs
+st.markdown('<div class="upload-card"><div class="section-title">⚙️ Static Inputs <span style="font-size:0.85rem; font-weight:400; color:#666;">(Monthly updates)</span></div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.caption("**COGS** _(product_id, product_name, cogs)_")
+    cogs_file = st.file_uploader("COGS", type=['csv'], key="cogs", label_visibility="collapsed")
+    if cogs_file:
+        uploaded_files['cogs'] = pd.read_csv(cogs_file)
+        st.success(f"✓ {len(uploaded_files['cogs']):,} rows")
+
+with col2:
+    st.caption("**Brand Aligned SDPO**")
+    sdpo_file = st.file_uploader("SDPO", type=['csv'], key="sdpo", label_visibility="collapsed")
+    if sdpo_file:
+        uploaded_files['sdpo'] = pd.read_csv(sdpo_file)
+        st.success(f"✓ {len(uploaded_files['sdpo']):,} rows")
+
+with col3:
+    st.caption("**City Brand Exclusion**")
+    exclusion_file = st.file_uploader("Exclusion", type=['csv'], key="exclusion", label_visibility="collapsed")
+    if exclusion_file:
+        uploaded_files['exclusion'] = pd.read_csv(exclusion_file)
+        st.success(f"✓ {len(uploaded_files['exclusion']):,} rows")
+
+st.markdown('</div>', unsafe_allow_html=True)
+
 # ==================== PROGRESS TRACKER & RUN BUTTON ====================
 # Define all required files
 all_required_files = [
@@ -112,21 +192,21 @@ all_required_files = [
     'cogs', 'sdpo', 'exclusion'
 ]
 
-uploaded_count = sum(1 for key in all_required_files if key in st.session_state.uploaded_files)
+uploaded_count = sum(1 for key in all_required_files if key in uploaded_files)
 is_ready = uploaded_count == len(all_required_files)
 
 col1, col2, col3, col4, col5 = st.columns([1.5, 1.5, 1.5, 1.5, 2])
 
 with col1:
-    scraped_count = sum(1 for key in ['im_prices', 'comp_prices', 'necc_prices'] if key in st.session_state.uploaded_files)
+    scraped_count = sum(1 for key in ['im_prices', 'comp_prices', 'necc_prices'] if key in uploaded_files)
     st.metric("📥 Scraped", f"{scraped_count}/3", delta=None)
 
 with col2:
-    compute_count = sum(1 for key in ['sales', 'stocks'] if key in st.session_state.uploaded_files)
+    compute_count = sum(1 for key in ['sales', 'stocks'] if key in uploaded_files)
     st.metric("🧮 Compute", f"{compute_count}/2", delta=None)
 
 with col3:
-    static_count = sum(1 for key in ['cogs', 'sdpo', 'exclusion'] if key in st.session_state.uploaded_files)
+    static_count = sum(1 for key in ['cogs', 'sdpo', 'exclusion'] if key in uploaded_files)
     st.metric("⚙️ Static", f"{static_count}/3", delta=None)
 
 with col4:
@@ -146,8 +226,8 @@ st.progress(progress)
 # ==================== PROCESS MODEL ====================
 if run_button:
     try:
-        cogs_df = st.session_state.uploaded_files['cogs']
-        stocks_df = st.session_state.uploaded_files['stocks']
+        cogs_df = uploaded_files['cogs']
+        stocks_df = uploaded_files['stocks']
         
         # Validate required columns
         required_cogs_cols = ['product_id', 'product_name', 'cogs']
@@ -199,106 +279,3 @@ if st.session_state.model_run and st.session_state.results_df is not None:
     )
     
     st.markdown("---")
-
-# ==================== FILE UPLOADS (Below results) ====================
-
-# Scraped Data Inputs
-st.markdown('<div class="upload-card"><div class="section-title">📥 Scraped Data Inputs</div>', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.caption("**IM Prices**")
-    im_prices = st.file_uploader("IM", type=['csv'], key="im_prices", label_visibility="collapsed")
-    if im_prices:
-        df = pd.read_csv(im_prices)
-        st.session_state.uploaded_files['im_prices'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'im_prices' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['im_prices']):,} rows")
-
-with col2:
-    st.caption("**Competition Prices**")
-    comp_prices = st.file_uploader("Comp", type=['csv'], key="comp_prices", label_visibility="collapsed")
-    if comp_prices:
-        df = pd.read_csv(comp_prices)
-        st.session_state.uploaded_files['comp_prices'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'comp_prices' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['comp_prices']):,} rows")
-
-with col3:
-    st.caption("**NECC Prices**")
-    necc_prices = st.file_uploader("NECC", type=['csv'], key="necc_prices", label_visibility="collapsed")
-    if necc_prices:
-        df = pd.read_csv(necc_prices)
-        st.session_state.uploaded_files['necc_prices'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'necc_prices' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['necc_prices']):,} rows")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Computation Inputs
-st.markdown('<div class="upload-card"><div class="section-title">🧮 Computation Inputs</div>', unsafe_allow_html=True)
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.caption("**Sales Data**")
-    sales_file = st.file_uploader("Sales", type=['csv'], key="sales", label_visibility="collapsed")
-    if sales_file:
-        df = pd.read_csv(sales_file)
-        st.session_state.uploaded_files['sales'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'sales' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['sales']):,} rows")
-
-with col2:
-    st.caption("**Stocks Data** _(product_id, stock_level)_")
-    stocks_file = st.file_uploader("Stocks", type=['csv'], key="stocks", label_visibility="collapsed")
-    if stocks_file:
-        df = pd.read_csv(stocks_file)
-        st.session_state.uploaded_files['stocks'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'stocks' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['stocks']):,} rows")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Static Inputs
-st.markdown('<div class="upload-card"><div class="section-title">⚙️ Static Inputs <span style="font-size:0.85rem; font-weight:400; color:#666;">(Monthly updates)</span></div>', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.caption("**COGS** _(product_id, product_name, cogs)_")
-    cogs_file = st.file_uploader("COGS", type=['csv'], key="cogs", label_visibility="collapsed")
-    if cogs_file:
-        df = pd.read_csv(cogs_file)
-        st.session_state.uploaded_files['cogs'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'cogs' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['cogs']):,} rows")
-
-with col2:
-    st.caption("**Brand Aligned SDPO**")
-    sdpo_file = st.file_uploader("SDPO", type=['csv'], key="sdpo", label_visibility="collapsed")
-    if sdpo_file:
-        df = pd.read_csv(sdpo_file)
-        st.session_state.uploaded_files['sdpo'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'sdpo' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['sdpo']):,} rows")
-
-with col3:
-    st.caption("**City Brand Exclusion**")
-    exclusion_file = st.file_uploader("Exclusion", type=['csv'], key="exclusion", label_visibility="collapsed")
-    if exclusion_file:
-        df = pd.read_csv(exclusion_file)
-        st.session_state.uploaded_files['exclusion'] = df
-        st.success(f"✓ {len(df):,} rows")
-    elif 'exclusion' in st.session_state.uploaded_files:
-        st.info(f"✓ {len(st.session_state.uploaded_files['exclusion']):,} rows")
-
-st.markdown('</div>', unsafe_allow_html=True)
