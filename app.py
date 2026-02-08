@@ -73,180 +73,150 @@ if 'model_run' not in st.session_state:
 
 # ==================== INSTRUCTIONS (Collapsible) ====================
 with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=False):
-    col1, col2 = st.columns([3, 2])
+    st.markdown("""
+    **Step 1:** Select the product category from the dropdown  
+    **Step 2:** Set your target margin percentage  
+    **Step 3:** Upload COGS file (Required columns: `product_id`, `product_name`, `cogs`)  
+    **Step 4:** Upload Brand Aligned Discount file (if any)  
+    **Step 5:** Click "Run Pricing Model" button  
+    **Step 6:** Download pricing recommendations
     
-    with col1:
-        st.markdown("""
-        **Step 1:** Upload all 8 required CSV files in the sections below  
-        **Step 2:** Monitor upload progress (must be 8/8)  
-        **Step 3:** Click "Run Pricing Model" button  
-        **Step 4:** Download pricing recommendations
-        
-        **📁 Required Files:**
-        - **Scraped Data (3):** IM Prices, Competition Prices, NECC Prices
-        - **Computation (2):** Sales Data, Stocks Data _(product_id, stock_level)_
-        - **Static (3):** COGS _(product_id, product_name, cogs)_, SDPO, Exclusion List
-        """)
-    
-    with col2:
-        st.markdown("""
-        **⚙️ Pricing Logic:**
-        - Low stock (< 50): 40% markup
-        - Medium (50-200): 30% markup
-        - High stock (> 200): 20% markup
-        """)
+    **⚙️ Pricing Logic:**
+    - Low stock (< 50): 40% markup
+    - Medium (50-200): 30% markup
+    - High stock (> 200): 20% markup
+    """)
+
+# ==================== CATEGORY AND MARGIN SELECTION ====================
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("**📦 Select Product Category**")
+    categories = [
+        "Batters And Chutneys",
+        "Bread And Buns",
+        "Butter",
+        "Cheese",
+        "Curd",
+        "Dairy Alternatives",
+        "Eggs",
+        "Indian Breads",
+        "Milk",
+        "Milk Based Drinks",
+        "Paneer And Cream",
+        "Yogurts"
+    ]
+    selected_category = st.selectbox(
+        "Category",
+        options=categories,
+        label_visibility="collapsed"
+    )
+
+with col2:
+    st.markdown("**🎯 Target Margin %**")
+    target_margin = st.number_input(
+        "Margin",
+        min_value=0.0,
+        max_value=100.0,
+        value=30.0,
+        step=0.5,
+        format="%.1f",
+        label_visibility="collapsed"
+    )
+
+st.markdown("---")
 
 # Create placeholder containers for proper ordering
 progress_container = st.container()
 results_container = st.container()
 uploads_container = st.container()
 
-# ==================== FILE UPLOADS (rendered first but displayed last) ====================
+# ==================== FILE UPLOADS ====================
 with uploads_container:
     # Dictionary to store uploaded files
     uploaded_files = {}
 
-    # Scraped Data Inputs
-    st.markdown('<div class="upload-card"><div class="section-title">📥 Scraped Data Inputs</div>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.caption("**IM Prices**")
-        im_prices = st.file_uploader("IM", type=['csv'], key="im_prices", label_visibility="collapsed")
-        if im_prices:
-            uploaded_files['im_prices'] = pd.read_csv(im_prices)
-            st.success(f"✓ {len(uploaded_files['im_prices']):,} rows")
-
-    with col2:
-        st.caption("**Competition Prices**")
-        comp_prices = st.file_uploader("Comp", type=['csv'], key="comp_prices", label_visibility="collapsed")
-        if comp_prices:
-            uploaded_files['comp_prices'] = pd.read_csv(comp_prices)
-            st.success(f"✓ {len(uploaded_files['comp_prices']):,} rows")
-
-    with col3:
-        st.caption("**NECC Prices**")
-        necc_prices = st.file_uploader("NECC", type=['csv'], key="necc_prices", label_visibility="collapsed")
-        if necc_prices:
-            uploaded_files['necc_prices'] = pd.read_csv(necc_prices)
-            st.success(f"✓ {len(uploaded_files['necc_prices']):,} rows")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Computation Inputs
-    st.markdown('<div class="upload-card"><div class="section-title">🧮 Computation Inputs</div>', unsafe_allow_html=True)
+    # Upload Inputs Section
+    st.markdown('<div class="upload-card"><div class="section-title">📥 Upload Inputs</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.caption("**Sales Data**")
-        sales_file = st.file_uploader("Sales", type=['csv'], key="sales", label_visibility="collapsed")
-        if sales_file:
-            uploaded_files['sales'] = pd.read_csv(sales_file)
-            st.success(f"✓ {len(uploaded_files['sales']):,} rows")
-
-    with col2:
-        st.caption("**Stocks Data** _(product_id, stock_level)_")
-        stocks_file = st.file_uploader("Stocks", type=['csv'], key="stocks", label_visibility="collapsed")
-        if stocks_file:
-            uploaded_files['stocks'] = pd.read_csv(stocks_file)
-            st.success(f"✓ {len(uploaded_files['stocks']):,} rows")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Static Inputs
-    st.markdown('<div class="upload-card"><div class="section-title">⚙️ Static Inputs <span style="font-size:0.85rem; font-weight:400; color:#666;">(Monthly updates)</span></div>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.caption("**COGS** _(product_id, product_name, cogs)_")
+        st.caption("**COGS** _(Required: product_id, product_name, cogs)_")
         cogs_file = st.file_uploader("COGS", type=['csv'], key="cogs", label_visibility="collapsed")
         if cogs_file:
             uploaded_files['cogs'] = pd.read_csv(cogs_file)
             st.success(f"✓ {len(uploaded_files['cogs']):,} rows")
 
     with col2:
-        st.caption("**Brand Aligned SDPO**")
-        sdpo_file = st.file_uploader("SDPO", type=['csv'], key="sdpo", label_visibility="collapsed")
-        if sdpo_file:
-            uploaded_files['sdpo'] = pd.read_csv(sdpo_file)
-            st.success(f"✓ {len(uploaded_files['sdpo']):,} rows")
-
-    with col3:
-        st.caption("**City Brand Exclusion**")
-        exclusion_file = st.file_uploader("Exclusion", type=['csv'], key="exclusion", label_visibility="collapsed")
-        if exclusion_file:
-            uploaded_files['exclusion'] = pd.read_csv(exclusion_file)
-            st.success(f"✓ {len(uploaded_files['exclusion']):,} rows")
+        st.caption("**Brand Aligned Discount** _(Optional)_")
+        discount_file = st.file_uploader("Discount", type=['csv'], key="discount", label_visibility="collapsed")
+        if discount_file:
+            uploaded_files['discount'] = pd.read_csv(discount_file)
+            st.success(f"✓ {len(uploaded_files['discount']):,} rows")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ==================== PROGRESS TRACKER & RUN BUTTON (displayed at top) ====================
+# ==================== PROGRESS TRACKER & RUN BUTTON ====================
 with progress_container:
-    # Define all required files
-    all_required_files = [
-        'im_prices', 'comp_prices', 'necc_prices',
-        'sales', 'stocks',
-        'cogs', 'sdpo', 'exclusion'
-    ]
+    # Check if required file is uploaded
+    is_ready = 'cogs' in uploaded_files
 
-    uploaded_count = sum(1 for key in all_required_files if key in uploaded_files)
-    is_ready = uploaded_count == len(all_required_files)
-
-    col1, col2, col3, col4, col5 = st.columns([1.5, 1.5, 1.5, 1.5, 2])
+    col1, col2, col3 = st.columns([2, 2, 3])
 
     with col1:
-        scraped_count = sum(1 for key in ['im_prices', 'comp_prices', 'necc_prices'] if key in uploaded_files)
-        st.metric("📥 Scraped", f"{scraped_count}/3", delta=None)
+        st.metric("📂 Files Uploaded", f"{len(uploaded_files)}/2")
 
     with col2:
-        compute_count = sum(1 for key in ['sales', 'stocks'] if key in uploaded_files)
-        st.metric("🧮 Compute", f"{compute_count}/2", delta=None)
+        st.metric("✅ Status", "Ready" if is_ready else "Upload COGS")
 
     with col3:
-        static_count = sum(1 for key in ['cogs', 'sdpo', 'exclusion'] if key in uploaded_files)
-        st.metric("⚙️ Static", f"{static_count}/3", delta=None)
-
-    with col4:
-        st.metric("✅ Total", f"{uploaded_count}/8", delta=None)
-
-    with col5:
         run_button = st.button(
-            "🚀 RUN MODEL" if is_ready else "⏳ UPLOAD FILES",
+            "🚀 RUN MODEL" if is_ready else "⏳ UPLOAD COGS FILE",
             type="primary",
             use_container_width=True,
             disabled=not is_ready
         )
 
-    progress = uploaded_count / len(all_required_files)
+    # Progress bar
+    progress = len(uploaded_files) / 2
     st.progress(progress)
+
+    # Display selected parameters
+    st.info(f"**Category:** {selected_category} | **Target Margin:** {target_margin}%")
 
     # ==================== PROCESS MODEL ====================
     if run_button:
         try:
             cogs_df = uploaded_files['cogs']
-            stocks_df = uploaded_files['stocks']
             
             # Validate required columns
             required_cogs_cols = ['product_id', 'product_name', 'cogs']
-            required_stocks_cols = ['product_id', 'stock_level']
             
             if not all(col in cogs_df.columns for col in required_cogs_cols):
                 st.error(f"❌ COGS must contain: {', '.join(required_cogs_cols)}")
-            elif not all(col in stocks_df.columns for col in required_stocks_cols):
-                st.error(f"❌ Stocks must contain: {', '.join(required_stocks_cols)}")
             else:
                 with st.spinner("⏳ Running pricing model..."):
+                    # You can pass selected_category and target_margin to your pricing model
+                    # For now, using dummy stocks data
+                    stocks_df = pd.DataFrame({
+                        'product_id': cogs_df['product_id'],
+                        'stock_level': 100  # Default stock level
+                    })
+                    
                     results_df = run_pricing_model(cogs_df, stocks_df)
+                    
+                    # Add category and margin to results
+                    results_df['category'] = selected_category
+                    results_df['target_margin_%'] = target_margin
+                    
                     st.session_state.results_df = results_df
                     st.session_state.model_run = True
         
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
 
-# ==================== DISPLAY RESULTS (between progress and uploads) ====================
+# ==================== DISPLAY RESULTS ====================
 with results_container:
     if st.session_state.model_run and st.session_state.results_df is not None:
         results_df = st.session_state.results_df
@@ -273,7 +243,7 @@ with results_container:
         st.download_button(
             label="⬇️ DOWNLOAD MODELED PRICES TABLE (CSV)",
             data=csv,
-            file_name="modeled_prices.csv",
+            file_name=f"modeled_prices_{selected_category.replace(' ', '_').lower()}.csv",
             mime="text/csv",
             use_container_width=True,
             type="primary"
