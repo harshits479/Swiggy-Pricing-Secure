@@ -7,7 +7,6 @@ import io
 # Page config
 st.set_page_config(page_title="Swiggy Pricing Commander", page_icon="💰", layout="wide")
 
-# Custom CSS
 st.markdown("""
     <style>
     .main-header {
@@ -18,22 +17,16 @@ st.markdown("""
         border-radius: 12px;
         margin-bottom: 1.5rem;
     }
-    .upload-card {
-        background: #f8f9fa;
-        padding: 1.2rem;
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 20px;
         border-radius: 10px;
-        border-left: 5px solid #fc8019;
-        margin-bottom: 1rem;
-    }
-    .stButton>button {
-        background: #fc8019;
-        color: white;
-        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     </style>
     """, unsafe_allow_html=True)
 
-# Header
 st.markdown("""
     <div class="main-header">
         <h1>🥚 Swiggy Instamart: Egg Pricing Commander</h1>
@@ -41,20 +34,15 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# Initialize session state
 if 'results_df' not in st.session_state: st.session_state.results_df = None
 if 'model_run' not in st.session_state: st.session_state.model_run = False
 if 'summary' not in st.session_state: st.session_state.summary = None
 if 'opp_upload' not in st.session_state: st.session_state.opp_upload = None
 if 'branded_upload' not in st.session_state: st.session_state.branded_upload = None
 
-# Sidebar Inputs
 st.sidebar.header("Configuration")
 selected_category = st.sidebar.selectbox("Category", ["Eggs", "Dairy", "Bread"], index=0)
 target_margin = st.sidebar.slider("Target Net Margin (%)", 0, 50, 15)
-
-# ==================== FILE UPLOADS ====================
-st.markdown('<div class="upload-card"><h3>📥 Upload Data</h3></div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -63,18 +51,14 @@ with col2:
     sdpo_file = st.file_uploader("Upload SDPO (Optional)", type=['csv'], key="sdpo")
 
 if cogs_file:
+    cogs_file.seek(0)
     uploaded_cogs = pd.read_csv(cogs_file)
     st.success(f"✅ Loaded {len(uploaded_cogs)} products from COGS.")
-    # --- FIX 1: Reset cursor so we can read it again later ---
     cogs_file.seek(0)
-else:
-    st.info("Waiting for COGS file...")
 
-# ==================== RUN MODEL ====================
 if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
     with st.spinner("Initializing Pricing Engine..."):
         try:
-            # --- FIX 2: Read clean file ---
             cogs_file.seek(0)
             cogs_df = pd.read_csv(cogs_file)
             
@@ -83,68 +67,45 @@ if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
                 sdpo_file.seek(0)
                 sdpo_df = pd.read_csv(sdpo_file)
             
-            # 2. GENERATE ROBUST DUMMY DATA (Aligned with new Column Logic)
-            
-            # Normalize column names first to extract IDs
+            # --- Dummy Data Gen ---
             if 'product_id' in cogs_df.columns: cogs_df = cogs_df.rename(columns={'product_id': 'Item Code', 'product_name': 'Item Name'})
             if 'sku' in cogs_df.columns: cogs_df = cogs_df.rename(columns={'sku': 'Item Code'})
             
-            # Create lists for dummy generation
             ids = cogs_df['Item Code'].astype(str).tolist()
             names = cogs_df['Item Name'].tolist() if 'Item Name' in cogs_df.columns else [f"Item {i}" for i in ids]
             
-            # --- Dummy/Fallback Data Creation (Matches IDs from COGS) ---
             df_im = pd.DataFrame({
                 'Item Code': ids,
                 'City': ['Bangalore'] * len(ids),
                 'Item Name': names,
                 'UOM': ['10_pieces'] * len(ids),
-                'MRP': [100] * len(ids)
+                'Selling Price': [100] * len(ids), # Important for GMV calc
+                'MRP': [110] * len(ids)
             })
             
             df_comp = pd.DataFrame({
-                'Item Name': names[:len(names)//2], # Partial match
-                'City': ['Bangalore'] * (len(names)//2),
-                'UOM': ['10_pieces'] * (len(names)//2),
-                'Selling Price': [90] * (len(names)//2)
+                'Item Name': names,
+                'City': ['Bangalore'] * len(names),
+                'UOM': ['10_pieces'] * len(names),
+                'Selling Price': [90] * len(names)
             })
             
             df_necc = pd.DataFrame({'UOM': ['10_pieces'], 'Price': [85]})
-            
-            df_stock = pd.DataFrame({
-                'Item Code': ids,
-                'Stock Level': [100] * len(ids)
-            })
-            
+            df_stock = pd.DataFrame({'Item Code': ids, 'Stock Level': [100] * len(ids)})
             df_gmv = pd.DataFrame({'category': [selected_category], 'weight': [1.0]})
             
-            df_sensitivity = pd.DataFrame({
-                'Item Code': ids,
-                'Sensitivity Score': [-1.5] * len(ids) # Elasticity assumption
-            })
+            # Simulated Sensitivity (-1.5 means price cut = huge volume)
+            df_sensitivity = pd.DataFrame({'Item Code': ids, 'Sensitivity Score': [-1.5] * len(ids)})
             
             city_mapping = pd.DataFrame({'City': ['Bangalore'], 'CITY_ID': [1]})
             spin_mapping = pd.DataFrame({'Item Code': ids, 'spin_id': range(1000, 1000+len(ids))})
             exclusions = pd.DataFrame()
             
-            # 3. CALL THE ENGINE
             results_df, summary, opp_upload, branded_upload = run_pricing_model(
-                im_pricing=df_im,
-                comp_pricing=df_comp,
-                necc_pricing=df_necc,
-                cogs_df=cogs_df,
-                sdpo_df=sdpo_df,
-                stock_insights=df_stock,
-                gmv_weights=df_gmv,
-                price_sensitivity=df_sensitivity,
-                city_mapping=city_mapping,
-                spin_mapping=spin_mapping,
-                exclusions=exclusions,
-                target_margin=target_margin,
-                category=selected_category
+                df_im, df_comp, df_necc, cogs_df, sdpo_df, df_stock, df_gmv, df_sensitivity, 
+                city_mapping, spin_mapping, exclusions, target_margin, selected_category
             )
             
-            # 4. Save to Session
             st.session_state.results_df = results_df
             st.session_state.summary = summary
             st.session_state.opp_upload = opp_upload
@@ -158,40 +119,38 @@ if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
 
 # ==================== DISPLAY RESULTS ====================
 if st.session_state.model_run and st.session_state.results_df is not None:
-    df = st.session_state.results_df
     summary = st.session_state.summary
     
-    st.success("✅ Pricing Model Run Complete!")
+    st.markdown("### 📊 Key Performance Indicators")
     
-    # KPIS
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total SKUs", summary['total_products'])
-    col2.metric("Avg Net Margin", f"{summary['avg_net_margin']:.1f}%")
-    col3.metric("Price Index", f"{summary['avg_price_index']:.1f}")
-    col4.metric("GMV Goodness", f"{summary['avg_gmv_goodness']:.2f}")
+    col1, col2 = st.columns(2)
     
-    # Detailed Table
-    st.subheader("📋 Pricing Recommendations")
+    # Modeled NM
+    col1.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #555;">Modeled Net Margin</h3>
+            <h1 style="color: #fc8019; font-size: 3rem;">{summary['avg_net_margin']:.1f}%</h1>
+            <p>Target: {target_margin}%</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    display_cols = ['Item Code', 'Item Name', 'COGS', 'Final Price', 'net_margin', 'price_index', 'gmv_goodness']
-    actual_cols = [c for c in display_cols if c in df.columns]
+    # GMV Uplift
+    uplift = summary['avg_gmv_uplift']
+    color = "green" if uplift >= 0 else "red"
+    sign = "+" if uplift >= 0 else ""
     
-    # --- FIX 3: Round before display to avoid Streamlit formatter crash ---
-    df_display = df[actual_cols].copy()
+    col2.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #555;">GMV Goodness (Uplift)</h3>
+            <h1 style="color: {color}; font-size: 3rem;">{sign}{uplift:.1f}%</h1>
+            <p>Expected Revenue Impact</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    # Safely convert to float and round
-    num_cols = ['COGS', 'Final Price', 'net_margin', 'price_index', 'gmv_goodness']
-    for c in num_cols:
-        if c in df_display.columns:
-            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0).round(2)
-            
-    st.dataframe(
-        df_display,
-        use_container_width=True,
-        hide_index=True
-    )
+    st.success("Pricing successfully Modeled.")
     
     # Downloads
+    st.markdown("---")
     st.subheader("📥 Download Upload Files")
     c1, c2 = st.columns(2)
     
