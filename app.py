@@ -65,6 +65,8 @@ with col2:
 if cogs_file:
     uploaded_cogs = pd.read_csv(cogs_file)
     st.success(f"✅ Loaded {len(uploaded_cogs)} products from COGS.")
+    # --- FIX 1: Reset the file pointer so it can be read again later ---
+    cogs_file.seek(0) 
 else:
     st.info("Waiting for COGS file...")
 
@@ -72,14 +74,16 @@ else:
 if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
     with st.spinner("Initializing Pricing Engine..."):
         try:
-            # 1. Load User Uploads
+            # --- FIX 2: Ensure we are reading from the start ---
+            cogs_file.seek(0)
             cogs_df = pd.read_csv(cogs_file)
-            sdpo_df = pd.read_csv(sdpo_file) if sdpo_file else None
+            
+            sdpo_df = None
+            if sdpo_file:
+                sdpo_file.seek(0) # Reset SDPO file pointer too just in case
+                sdpo_df = pd.read_csv(sdpo_file)
             
             # 2. GENERATE ROBUST DATA (or Load from Drive/Folder in Prod)
-            # This block ensures the app works even if 'data/' folder is empty/missing
-            
-            # Normalize column names first to extract IDs
             if 'product_id' in cogs_df.columns: cogs_df = cogs_df.rename(columns={'product_id': 'Item Code', 'product_name': 'Item Name'})
             if 'sku' in cogs_df.columns: cogs_df = cogs_df.rename(columns={'sku': 'Item Code'})
             
@@ -97,7 +101,7 @@ if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
             })
             
             df_comp = pd.DataFrame({
-                'Item Name': names[:len(names)//2], # Partial match
+                'Item Name': names[:len(names)//2], 
                 'City': ['Bangalore'] * (len(names)//2),
                 'UOM': ['10_pieces'] * (len(names)//2),
                 'Selling Price': [90] * (len(names)//2)
@@ -114,7 +118,7 @@ if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
             
             df_sensitivity = pd.DataFrame({
                 'Item Code': ids,
-                'Sensitivity Score': [-1.5] * len(ids) # Elasticity assumption
+                'Sensitivity Score': [-1.5] * len(ids)
             })
             
             city_mapping = pd.DataFrame({'City': ['Bangalore'], 'CITY_ID': [1]})
@@ -168,7 +172,6 @@ if st.session_state.model_run and st.session_state.results_df is not None:
     st.subheader("📋 Pricing Recommendations")
     
     display_cols = ['Item Code', 'Item Name', 'COGS', 'Final Price', 'net_margin', 'price_index', 'gmv_goodness']
-    # Filter only columns that exist
     actual_cols = [c for c in display_cols if c in df.columns]
     
     st.dataframe(
