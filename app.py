@@ -102,7 +102,7 @@ with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=Fa
         - High stock (> 200): 20% markup
         """)
 
-# ==================== FILE UPLOADS ====================
+# ==================== FILE UPLOADS FIRST (to populate uploaded_files dict) ====================
 
 # Dictionary to store uploaded files (using file uploaders directly)
 uploaded_files = {}
@@ -277,5 +277,3 @@ if st.session_state.model_run and st.session_state.results_df is not None:
         use_container_width=True,
         type="primary"
     )
-    
-    st.markdown("---")
