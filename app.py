@@ -74,6 +74,8 @@ st.markdown("""
 # Initialize session state
 if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = {}
+if 'results_df' not in st.session_state:
+    st.session_state.results_df = None
 
 # Define all required files
 all_required_files = [
@@ -133,7 +135,8 @@ with col5:
         "🚀 RUN MODEL" if is_ready else "⏳ UPLOAD FILES",
         type="primary",
         use_container_width=True,
-        disabled=not is_ready
+        disabled=not is_ready,
+        key="run_model_button"
     )
 
 progress = uploaded_count / len(all_required_files)
@@ -235,34 +238,39 @@ if run_button:
         else:
             with st.spinner("⏳ Running pricing model..."):
                 results_df = run_pricing_model(cogs_df, stocks_df)
-            
-            st.success(f"✅ Completed! {len(results_df):,} products priced", icon="🎉")
-            
-            # Summary
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Products", f"{len(results_df):,}")
-            with col2:
-                st.metric("Avg Price", f"${results_df['recommended_price'].mean():.2f}")
-            with col3:
-                st.metric("Min", f"${results_df['recommended_price'].min():.2f}")
-            with col4:
-                st.metric("Max", f"${results_df['recommended_price'].max():.2f}")
-            
-            # Results table
-            st.subheader("📋 Pricing Recommendations")
-            st.dataframe(results_df, use_container_width=True, height=350)
-            
-            # Download
-            csv = results_df.to_csv(index=False)
-            st.download_button(
-                label="⬇️ DOWNLOAD RESULTS (CSV)",
-                data=csv,
-                file_name="pricing_recommendations.csv",
-                mime="text/csv",
-                use_container_width=True,
-                type="primary"
-            )
+                st.session_state.results_df = results_df
     
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
+
+# ==================== DISPLAY RESULTS ====================
+if st.session_state.results_df is not None:
+    results_df = st.session_state.results_df
+    
+    st.success(f"✅ Model completed successfully!", icon="🎉")
+    
+    # Modeled Prices Insights
+    st.markdown('<div class="upload-card"><div class="section-title">📊 Modeled Prices Insights</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Products", f"{len(results_df):,}")
+    with col2:
+        st.metric("Average Price", f"${results_df['recommended_price'].mean():.2f}")
+    with col3:
+        st.metric("Min Price", f"${results_df['recommended_price'].min():.2f}")
+    with col4:
+        st.metric("Max Price", f"${results_df['recommended_price'].max():.2f}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Download button
+    csv = results_df.to_csv(index=False)
+    st.download_button(
+        label="⬇️ DOWNLOAD MODELED PRICES TABLE (CSV)",
+        data=csv,
+        file_name="modeled_prices.csv",
+        mime="text/csv",
+        use_container_width=True,
+        type="primary"
+    )
