@@ -65,8 +65,8 @@ with col2:
 if cogs_file:
     uploaded_cogs = pd.read_csv(cogs_file)
     st.success(f"✅ Loaded {len(uploaded_cogs)} products from COGS.")
-    # --- FIX 1: Reset the file pointer so it can be read again later ---
-    cogs_file.seek(0) 
+    # --- FIX 1: Reset cursor so we can read it again later ---
+    cogs_file.seek(0)
 else:
     st.info("Waiting for COGS file...")
 
@@ -74,16 +74,18 @@ else:
 if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
     with st.spinner("Initializing Pricing Engine..."):
         try:
-            # --- FIX 2: Ensure we are reading from the start ---
+            # --- FIX 2: Read clean file ---
             cogs_file.seek(0)
             cogs_df = pd.read_csv(cogs_file)
             
             sdpo_df = None
             if sdpo_file:
-                sdpo_file.seek(0) # Reset SDPO file pointer too just in case
+                sdpo_file.seek(0)
                 sdpo_df = pd.read_csv(sdpo_file)
             
-            # 2. GENERATE ROBUST DATA (or Load from Drive/Folder in Prod)
+            # 2. GENERATE ROBUST DUMMY DATA (Aligned with new Column Logic)
+            
+            # Normalize column names first to extract IDs
             if 'product_id' in cogs_df.columns: cogs_df = cogs_df.rename(columns={'product_id': 'Item Code', 'product_name': 'Item Name'})
             if 'sku' in cogs_df.columns: cogs_df = cogs_df.rename(columns={'sku': 'Item Code'})
             
@@ -101,7 +103,7 @@ if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
             })
             
             df_comp = pd.DataFrame({
-                'Item Name': names[:len(names)//2], 
+                'Item Name': names[:len(names)//2], # Partial match
                 'City': ['Bangalore'] * (len(names)//2),
                 'UOM': ['10_pieces'] * (len(names)//2),
                 'Selling Price': [90] * (len(names)//2)
@@ -118,7 +120,7 @@ if st.button("🚀 Run Pricing Model", disabled=not cogs_file):
             
             df_sensitivity = pd.DataFrame({
                 'Item Code': ids,
-                'Sensitivity Score': [-1.5] * len(ids)
+                'Sensitivity Score': [-1.5] * len(ids) # Elasticity assumption
             })
             
             city_mapping = pd.DataFrame({'City': ['Bangalore'], 'CITY_ID': [1]})
@@ -174,14 +176,19 @@ if st.session_state.model_run and st.session_state.results_df is not None:
     display_cols = ['Item Code', 'Item Name', 'COGS', 'Final Price', 'net_margin', 'price_index', 'gmv_goodness']
     actual_cols = [c for c in display_cols if c in df.columns]
     
+    # --- FIX 3: Round before display to avoid Streamlit formatter crash ---
+    df_display = df[actual_cols].copy()
+    
+    # Safely convert to float and round
+    num_cols = ['COGS', 'Final Price', 'net_margin', 'price_index', 'gmv_goodness']
+    for c in num_cols:
+        if c in df_display.columns:
+            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0).round(2)
+            
     st.dataframe(
-        df[actual_cols].style.format({
-            'COGS': '₹{:.2f}',
-            'Final Price': '₹{:.2f}',
-            'net_margin': '{:.1f}%',
-            'gmv_goodness': '{:.2f}'
-        }),
-        use_container_width=True
+        df_display,
+        use_container_width=True,
+        hide_index=True
     )
     
     # Downloads
