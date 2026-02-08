@@ -6,53 +6,108 @@ from pricing_model import run_pricing_model
 # Page config
 st.set_page_config(page_title="Pricing Model", page_icon="💰", layout="wide")
 
-# Custom CSS for compact styling
+# Custom CSS for better styling and reduced gaps
 st.markdown("""
     <style>
     .main-header {
         text-align: center;
-        padding: 0.8rem 0;
-        background: linear-gradient(90deg, #1f77b4 0%, #2ca02c 100%);
+        padding: 1.2rem 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        border-radius: 8px;
-        margin-bottom: 1rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     .main-header h1 {
         margin: 0;
-        font-size: 1.8rem;
+        font-size: 2rem;
+        font-weight: 700;
     }
     .main-header p {
-        margin: 0.3rem 0 0 0;
-        font-size: 0.95rem;
+        margin: 0.5rem 0 0 0;
+        font-size: 1rem;
+        opacity: 0.95;
     }
     .upload-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #1f77b4;
-        margin-bottom: 0.8rem;
+        background: linear-gradient(to right, #f8f9fa 0%, #e9ecef 100%);
+        padding: 1.2rem;
+        border-radius: 10px;
+        border-left: 5px solid #667eea;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
     .section-title {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         font-weight: 700;
-        color: #1f77b4;
-        margin-bottom: 0.3rem;
+        color: #667eea;
+        margin-bottom: 0.5rem;
     }
     .stButton>button {
-        height: 3rem;
-        font-size: 1.1rem;
+        height: 3.5rem;
+        font-size: 1.2rem;
         font-weight: 700;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        transition: all 0.3s ease;
     }
-    /* Reduce spacing */
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+    }
+    /* Reduce spacing between sections */
     .block-container {
-        padding-top: 2rem;
+        padding-top: 1rem;
         padding-bottom: 1rem;
     }
     div[data-testid="stExpander"] {
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.8rem;
+        background-color: #f8f9fa;
+        border-radius: 8px;
     }
     .stProgress > div > div {
-        height: 8px;
+        height: 6px;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    }
+    /* Reduce gap after selectbox and number input */
+    div[data-testid="stSelectbox"],
+    div[data-testid="stNumberInput"] {
+        margin-bottom: 0rem;
+    }
+    /* Reduce gap after file uploader */
+    div[data-testid="stFileUploader"] {
+        margin-bottom: 0rem;
+    }
+    /* Reduce gap between columns */
+    div[data-testid="column"] {
+        padding: 0.5rem;
+    }
+    /* Info box styling */
+    div[data-baseweb="notification"] {
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    /* Metric styling */
+    div[data-testid="stMetric"] {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    /* Success/error message */
+    .element-container:has(> .stSuccess),
+    .element-container:has(> .stError) {
+        margin-top: 0.3rem;
+        margin-bottom: 0.3rem;
+    }
+    /* Reduce spacing in markdown */
+    .element-container {
+        margin-bottom: 0.5rem;
+    }
+    /* Caption styling */
+    .stCaption {
+        color: #6c757d;
+        font-weight: 500;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -60,8 +115,8 @@ st.markdown("""
 # Header
 st.markdown("""
     <div class="main-header">
-        <h1>💰 Pricing Model Dashboard</h1>
-        <p>Upload data files and generate intelligent pricing recommendations</p>
+        <h1>💰 Dynamic Pricing Engine</h1>
+        <p>Smart pricing recommendations powered by data analytics</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -91,7 +146,7 @@ with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=Fa
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("**📦 Select Product Category**")
+    st.markdown("**📦 Product Category**")
     categories = [
         "Batters And Chutneys",
         "Bread And Buns",
@@ -124,30 +179,28 @@ with col2:
         label_visibility="collapsed"
     )
 
-st.markdown("---")
-
 # ==================== FILE UPLOADS ====================
 # Dictionary to store uploaded files
 uploaded_files = {}
 
 # Upload Inputs Section
-st.markdown('<div class="upload-card"><div class="section-title">📥 Upload Inputs</div>', unsafe_allow_html=True)
+st.markdown('<div class="upload-card"><div class="section-title">📥 Upload Data Files</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.caption("**COGS** _(Required: product_id, product_name, cogs)_")
+    st.caption("**COGS Data** _(product_id, product_name, cogs)_")
     cogs_file = st.file_uploader("COGS", type=['csv'], key="cogs", label_visibility="collapsed")
     if cogs_file:
         uploaded_files['cogs'] = pd.read_csv(cogs_file)
-        st.success(f"✓ {len(uploaded_files['cogs']):,} rows")
+        st.success(f"✓ {len(uploaded_files['cogs']):,} rows uploaded")
 
 with col2:
     st.caption("**Brand Aligned Discount** _(Optional)_")
     discount_file = st.file_uploader("Discount", type=['csv'], key="discount", label_visibility="collapsed")
     if discount_file:
         uploaded_files['discount'] = pd.read_csv(discount_file)
-        st.success(f"✓ {len(uploaded_files['discount']):,} rows")
+        st.success(f"✓ {len(uploaded_files['discount']):,} rows uploaded")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -156,10 +209,10 @@ st.markdown('</div>', unsafe_allow_html=True)
 is_ready = 'cogs' in uploaded_files
 
 # Display selected parameters
-st.info(f"**Category:** {selected_category} | **Target Margin:** {target_margin}%")
+st.info(f"📊 **Selected:** {selected_category} | **Target Margin:** {target_margin}%")
 
 run_button = st.button(
-    "🚀 RUN MODEL" if is_ready else "⏳ UPLOAD COGS FILE",
+    "🚀 RUN PRICING MODEL" if is_ready else "⏳ WAITING FOR COGS FILE...",
     type="primary",
     use_container_width=True,
     disabled=not is_ready
@@ -174,7 +227,7 @@ if run_button:
         required_cogs_cols = ['product_id', 'product_name', 'cogs']
         
         if not all(col in cogs_df.columns for col in required_cogs_cols):
-            st.error(f"❌ COGS must contain: {', '.join(required_cogs_cols)}")
+            st.error(f"❌ COGS file must contain: {', '.join(required_cogs_cols)}")
         else:
             with st.spinner("⏳ Running pricing model..."):
                 # You can pass selected_category and target_margin to your pricing model
@@ -200,36 +253,39 @@ if run_button:
 if st.session_state.model_run and st.session_state.results_df is not None:
     results_df = st.session_state.results_df
     
-    st.success(f"✅ Model completed successfully!", icon="🎉")
+    st.success(f"✅ Pricing model completed successfully! Generated {len(results_df):,} recommendations", icon="🎉")
     
     # Modeled Prices Insights
-    st.markdown('<div class="upload-card"><div class="section-title">📊 Modeled Prices Insights</div>', unsafe_allow_html=True)
+    st.markdown('<div class="upload-card"><div class="section-title">📊 Pricing Insights</div>', unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Products", f"{len(results_df):,}")
+        st.metric("📦 Total Products", f"{len(results_df):,}")
     with col2:
-        st.metric("Average Price", f"${results_df['recommended_price'].mean():.2f}")
+        st.metric("💵 Average Price", f"${results_df['recommended_price'].mean():.2f}")
     with col3:
-        st.metric("Min Price", f"${results_df['recommended_price'].min():.2f}")
+        st.metric("⬇️ Min Price", f"${results_df['recommended_price'].min():.2f}")
     with col4:
-        st.metric("Max Price", f"${results_df['recommended_price'].max():.2f}")
+        st.metric("⬆️ Max Price", f"${results_df['recommended_price'].max():.2f}")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Table Preview
-    st.subheader("📋 Modeled Prices Preview (First 10 Rows)")
-    st.dataframe(results_df.head(10), use_container_width=True, height=350)
+    st.markdown("### 📋 Sample Pricing Data (First 10 Rows)")
+    st.dataframe(
+        results_df.head(10), 
+        use_container_width=True, 
+        height=350,
+        hide_index=True
+    )
     
     # Download button
     csv = results_df.to_csv(index=False)
     st.download_button(
-        label="⬇️ DOWNLOAD MODELED PRICES TABLE (CSV)",
+        label="📥 DOWNLOAD COMPLETE PRICING TABLE (CSV)",
         data=csv,
         file_name=f"modeled_prices_{selected_category.replace(' ', '_').lower()}.csv",
         mime="text/csv",
         use_container_width=True,
         type="primary"
     )
-    
-    st.markdown("---")
