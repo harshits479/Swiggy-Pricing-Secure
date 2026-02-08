@@ -91,7 +91,7 @@ with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=Fa
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("**Select Category**")
+    st.markdown("**📦 Select Product Category**")
     categories = [
         "Batters And Chutneys",
         "Bread And Buns",
@@ -157,33 +157,20 @@ with uploads_container:
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ==================== PROGRESS TRACKER & RUN BUTTON ====================
+# ==================== RUN BUTTON ====================
 with progress_container:
     # Check if required file is uploaded
     is_ready = 'cogs' in uploaded_files
 
-    col1, col2, col3 = st.columns([2, 2, 3])
-
-    with col1:
-        st.metric("📂 Files Uploaded", f"{len(uploaded_files)}/2")
-
-    with col2:
-        st.metric("✅ Status", "Ready" if is_ready else "Upload COGS")
-
-    with col3:
-        run_button = st.button(
-            "🚀 RUN MODEL" if is_ready else "⏳ UPLOAD COGS FILE",
-            type="primary",
-            use_container_width=True,
-            disabled=not is_ready
-        )
-
-    # Progress bar
-    progress = len(uploaded_files) / 2
-    st.progress(progress)
-
     # Display selected parameters
     st.info(f"**Category:** {selected_category} | **Target Margin:** {target_margin}%")
+
+    run_button = st.button(
+        "🚀 RUN MODEL" if is_ready else "⏳ UPLOAD COGS FILE",
+        type="primary",
+        use_container_width=True,
+        disabled=not is_ready
+    )
 
     # ==================== PROCESS MODEL ====================
     if run_button:
@@ -238,6 +225,10 @@ with results_container:
         
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # Table Preview
+        st.subheader("📋 Modeled Prices Preview (First 10 Rows)")
+        st.dataframe(results_df.head(10), use_container_width=True, height=350)
+        
         # Download button
         csv = results_df.to_csv(index=False)
         st.download_button(
@@ -250,4 +241,3 @@ with results_container:
         )
         
         st.markdown("---")
-
