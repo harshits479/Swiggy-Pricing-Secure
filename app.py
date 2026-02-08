@@ -109,31 +109,31 @@ st.divider()
 
 # Upload status overview
 st.subheader("📋 Upload Status")
-status_cols = st.columns(4)
 
-all_required_files = ['cogs', 'stocks']  # Define which files are mandatory
+# Define all required files (all 8 files are required)
+all_required_files = [
+    'im_prices', 'comp_prices', 'necc_prices',  # Scraped Data
+    'sales', 'stocks',  # Computation Inputs
+    'cogs', 'sdpo', 'exclusion'  # Static Inputs
+]
+
 uploaded_count = sum(1 for key in all_required_files if key in st.session_state.uploaded_files)
+is_ready = uploaded_count == len(all_required_files)
+
+status_cols = st.columns(2)
 
 with status_cols[0]:
-    st.metric("Required Files", f"{uploaded_count}/{len(all_required_files)}")
+    st.metric("Total Files Uploaded", f"{uploaded_count}/{len(all_required_files)}")
+
 with status_cols[1]:
-    st.metric("Total Files Uploaded", len(st.session_state.uploaded_files))
-with status_cols[2]:
-    optional_files = [k for k in st.session_state.uploaded_files.keys() if k not in all_required_files]
-    st.metric("Optional Files", len(optional_files))
-with status_cols[3]:
-    ready = all(key in st.session_state.uploaded_files for key in all_required_files)
-    st.metric("Status", "✅ Ready" if ready else "⏳ Pending")
+    st.metric("Status", "✅ Ready" if is_ready else "⏳ Pending")
 
 st.divider()
 
 # Run button
-if st.button("🚀 Run Pricing Model", type="primary", use_container_width=True):
-    # Check if required files are uploaded
-    if 'cogs' not in st.session_state.uploaded_files:
-        st.error("⚠️ Please upload COGS Inputs file (Static Inputs tab)")
-    elif 'stocks' not in st.session_state.uploaded_files:
-        st.error("⚠️ Please upload Stocks Data file (Computation Inputs tab)")
+if st.button("🚀 Run Pricing Model", type="primary", use_container_width=True, disabled=not is_ready):
+    if not is_ready:
+        st.error(f"⚠️ Please upload all {len(all_required_files)} required files before running the model")
     else:
         try:
             cogs_df = st.session_state.uploaded_files['cogs']
@@ -187,7 +187,7 @@ with st.expander("ℹ️ How to use this tool"):
     st.markdown("""
     ### Instructions:
     
-    #### 1. **Scraped Data Inputs** (Optional)
+    #### 1. **Scraped Data Inputs** (Required)
     - **IM Prices**: Internal market pricing data
     - **Competition Prices**: Competitor pricing information
     - **NECC Prices**: National Egg Co-ordination Committee pricing
@@ -196,14 +196,15 @@ with st.expander("ℹ️ How to use this tool"):
     - **Sales Data**: Historical sales information
     - **Stocks Data**: Current inventory levels (columns: `product_id`, `stock_level`)
     
-    #### 3. **Static Inputs** (Required/Monthly)
+    #### 3. **Static Inputs** (Required - Upload Monthly)
     - **COGS Inputs**: Cost of goods sold (columns: `product_id`, `product_name`, `cogs`)
     - **Brand Aligned SDPO**: Discount configuration by IM
     - **City Brand Exclusion List**: Brands excluded by city
     
     #### 4. Run the Model
-    - Ensure all required files are uploaded
-    - Click "Run Pricing Model" to generate recommendations
+    - Upload all 8 required files across the three tabs
+    - The "Run Pricing Model" button will be enabled once all files are uploaded
+    - Click to generate recommendations
     - Download the results as CSV
     
     ### Pricing Logic:
