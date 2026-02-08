@@ -185,8 +185,8 @@ class PricingEngine:
         df['modeled_price'] = df['base_price'] * df['comp_factor'] * df['stock_factor']
         
         # --- FIXED SDPO BLOCK ---
-        # Only process SDPO if it exists AND has the required Item Code column
         if df_sdpo is not None and not df_sdpo.empty:
+             # Check if standardization worked
              if 'Item Code' in df_sdpo.columns:
                  df_sdpo['Item Code'] = df_sdpo['Item Code'].astype(str)
                  df = df.merge(df_sdpo, on='Item Code', how='left', suffixes=('', '_sdpo'))
@@ -223,9 +223,13 @@ class PricingEngine:
             if 'Item Code' in df_sens.columns:
                 df_sens['Item Code'] = df_sens['Item Code'].astype(str)
                 df['Item Code'] = df['Item Code'].astype(str)
-                df_sens_unique = df_sens.groupby('Item Code')['Sensitivity Score'].mean().reset_index()
-                df = df.merge(df_sens_unique, on='Item Code', how='left')
-                df['gmv_goodness'] = df['Sensitivity Score'].fillna(0)
+                
+                # Group by Item Code to avoid duplicates if sensitivity file has daily data
+                # Assuming simple average sensitivity for the summary
+                if 'Sensitivity Score' in df_sens.columns:
+                    df_sens_unique = df_sens.groupby('Item Code')['Sensitivity Score'].mean().reset_index()
+                    df = df.merge(df_sens_unique, on='Item Code', how='left')
+                    df['gmv_goodness'] = df['Sensitivity Score'].fillna(0)
 
         summary = {
             'avg_net_margin': df['net_margin'].mean(),
