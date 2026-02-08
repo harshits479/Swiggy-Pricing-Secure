@@ -66,20 +66,33 @@ class PricingEngine:
         if df is None or df.empty: return df
         df = df.copy()
         
-        # Mapping variations to standard names
-        col_map = {
-            'product_id': 'Item Code', 'item_code': 'Item Code', 'ITEM_CODE': 'Item Code', 'sku': 'Item Code',
-            'city': 'City', 'CITY': 'City',
-            'uom': 'UOM', 'Uom': 'UOM',
-            'product_name': 'Item Name', 'item_name': 'Item Name', 'ITEM_NAME': 'Item Name',
-            'mrp': 'MRP',
-            'selling_price': 'Selling Price', 'Selling_Price': 'Selling Price', 'sp': 'Selling Price',
-            'cogs': 'COGS', 'Cost': 'COGS',
-            'stock_level': 'Stock Level', 'Stock': 'Stock Level',
-            'price_sensitivity_score': 'Sensitivity Score', 'Price Senstitivity': 'Sensitivity Score', # Typos handled
-            'sensitivity_score': 'Sensitivity Score'
+        # 1. Clean whitespace from column names
+        df.columns = [str(c).strip() for c in df.columns]
+        
+        # 2. Define Mapping (Target Name -> List of possible input names)
+        # using lowercase for matching
+        mapping_logic = {
+            'Item Code': ['product_id', 'item_code', 'item code', 'sku', 'sku_id', 'article_id', 'material', 'item_id'],
+            'City': ['city', 'city_name', 'location'],
+            'UOM': ['uom', 'pack_size', 'quantity', 'unit'],
+            'Item Name': ['product_name', 'item_name', 'item name', 'description', 'sku_name'],
+            'MRP': ['mrp', 'max_price'],
+            'Selling Price': ['selling_price', 'selling price', 'sp', 'current_price', 'price'],
+            'COGS': ['cogs', 'cost', 'base_cost', 'cost_price', 'cp'],
+            'Stock Level': ['stock_level', 'stock', 'inventory', 'qty_available', 'soh'],
+            'Sensitivity Score': ['price_sensitivity_score', 'sensitivity_score', 'price senstitivity', 'elasticity']
         }
-        df.rename(columns=col_map, inplace=True)
+        
+        # 3. Apply Mapping
+        new_names = {}
+        for col in df.columns:
+            col_lower = col.lower()
+            for target, possible_matches in mapping_logic.items():
+                if col_lower in possible_matches:
+                    new_names[col] = target
+                    break
+        
+        df.rename(columns=new_names, inplace=True)
         return df
 
     def normalize_im_data(self, df_im):
@@ -111,10 +124,8 @@ class PricingEngine:
         print("🔗 Running Matching Engine...")
         df_im = df_im_norm.copy()
         
-        # Match with Competition (Simple UOM match for demo)
-        # Using standardized columns: Normalized_UOM, Selling Price
+        # Match with Competition
         if not df_comp_norm.empty and 'Selling Price' in df_comp_norm.columns:
-            # Group by UOM to get an average market price per pack size
             comp_price_map = df_comp_norm.groupby('Normalized_UOM')['Selling Price'].mean().to_dict()
             df_im['comp_avg_price'] = df_im['Normalized_UOM'].map(comp_price_map)
         else:
@@ -140,12 +151,10 @@ class PricingEngine:
         df_stock = self._standardize_cols(df_stock)
         df_sdpo = self._standardize_cols(df_sdpo)
 
-        # Merge COGS (Critical)
+        # Merge COGS
         if 'Item Code' in df.columns and 'Item Code' in df_cogs.columns:
-            # Convert to string to ensure matching
             df['Item Code'] = df['Item Code'].astype(str)
             df_cogs['Item Code'] = df_cogs['Item Code'].astype(str)
-            
             df = df.merge(df_cogs[['Item Code', 'COGS']], on='Item Code', how='left')
             df['COGS'] = df['COGS'].fillna(0)
         else:
@@ -153,7 +162,7 @@ class PricingEngine:
             print("⚠️ Warning: COGS merge failed. Check Item Code columns.")
 
         # Merge Stock
-        if df_stock is not None and 'Item Code' in df.columns:
+        if df_stock is not None and 'Item Code' in df.columns and 'Item Code' in df_stock.columns:
             df_stock['Item Code'] = df_stock['Item Code'].astype(str)
             df = df.merge(df_stock[['Item Code', 'Stock Level']], on='Item Code', how='left')
         
@@ -163,9 +172,8 @@ class PricingEngine:
         # Competitive Logic
         df['comp_factor'] = 1.0
         if 'comp_avg_price' in df.columns:
-             # If base price is way higher than comp, cap it (simple logic)
              mask = (df['comp_avg_price'] > 0) & (df['base_price'] > df['comp_avg_price'] * 1.2)
-             df.loc[mask, 'comp_factor'] = 0.95 # Discount slightly if too expensive
+             df.loc[mask, 'comp_factor'] = 0.95 
         
         # Stock Logic
         if 'Stock Level' in df.columns:
@@ -176,10 +184,15 @@ class PricingEngine:
         # Final Modeled Price
         df['modeled_price'] = df['base_price'] * df['comp_factor'] * df['stock_factor']
         
-        # SDPO Logic
+        # --- FIXED SDPO BLOCK ---
+        # Only process SDPO if it exists AND has the required Item Code column
         if df_sdpo is not None and not df_sdpo.empty:
-             df_sdpo['Item Code'] = df_sdpo['Item Code'].astype(str)
-             df = df.merge(df_sdpo, on='Item Code', how='left', suffixes=('', '_sdpo'))
+             if 'Item Code' in df_sdpo.columns:
+                 df_sdpo['Item Code'] = df_sdpo['Item Code'].astype(str)
+                 df = df.merge(df_sdpo, on='Item Code', how='left', suffixes=('', '_sdpo'))
+             else:
+                 print(f"⚠️ Warning: SDPO file uploaded but could not find 'Item Code'. Found columns: {list(df_sdpo.columns)}")
+        # ------------------------
         
         df['Final Price'] = df['modeled_price'].round(2)
         df['category'] = category
@@ -207,14 +220,12 @@ class PricingEngine:
         df['gmv_goodness'] = 0.0
         
         if df_sens is not None and not df_sens.empty:
-            df_sens['Item Code'] = df_sens['Item Code'].astype(str)
-            df['Item Code'] = df['Item Code'].astype(str)
-            
-            # Group by Item Code to avoid duplicates if sensitivity file has daily data
-            df_sens_unique = df_sens.groupby('Item Code')['Sensitivity Score'].mean().reset_index()
-            
-            df = df.merge(df_sens_unique, on='Item Code', how='left')
-            df['gmv_goodness'] = df['Sensitivity Score'].fillna(0)
+            if 'Item Code' in df_sens.columns:
+                df_sens['Item Code'] = df_sens['Item Code'].astype(str)
+                df['Item Code'] = df['Item Code'].astype(str)
+                df_sens_unique = df_sens.groupby('Item Code')['Sensitivity Score'].mean().reset_index()
+                df = df.merge(df_sens_unique, on='Item Code', how='left')
+                df['gmv_goodness'] = df['Sensitivity Score'].fillna(0)
 
         summary = {
             'avg_net_margin': df['net_margin'].mean(),
@@ -227,22 +238,33 @@ class PricingEngine:
     def generate_upload_files(self, df_final, city_mapping, spin_mapping):
         print("📤 Generating Upload Files...")
         
-        # Standardize Mappings
         city_mapping = self._standardize_cols(city_mapping)
         spin_mapping = self._standardize_cols(spin_mapping)
         
-        # Create Dictionaries
-        city_mapping['city_clean'] = city_mapping['City'].astype(str).str.lower().str.strip()
-        city_dict = city_mapping.drop_duplicates('city_clean').set_index('city_clean')['CITY_ID'].to_dict()
-        
-        spin_mapping['item_code_str'] = spin_mapping['Item Code'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
-        spin_dict = spin_mapping.drop_duplicates('item_code_str').set_index('item_code_str')['spin_id'].to_dict()
+        # Mappings
+        if 'City' in city_mapping.columns:
+            city_mapping['city_clean'] = city_mapping['City'].astype(str).str.lower().str.strip()
+            city_dict = city_mapping.drop_duplicates('city_clean').set_index('city_clean')['CITY_ID'].to_dict()
+        else:
+            city_dict = {}
+
+        if 'Item Code' in spin_mapping.columns:
+            spin_mapping['item_code_str'] = spin_mapping['Item Code'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+            spin_dict = spin_mapping.drop_duplicates('item_code_str').set_index('item_code_str')['spin_id'].to_dict()
+        else:
+            spin_dict = {}
         
         # Prepare DF
-        df_final['city_clean'] = df_final['City'].astype(str).str.lower().str.strip()
-        df_final['item_code_str'] = df_final['Item Code'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+        if 'City' in df_final.columns:
+            df_final['city_clean'] = df_final['City'].astype(str).str.lower().str.strip()
+        else:
+            df_final['city_clean'] = ''
+            
+        if 'Item Code' in df_final.columns:
+            df_final['item_code_str'] = df_final['Item Code'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+        else:
+            df_final['item_code_str'] = ''
         
-        # --- Helper for Row Creation ---
         now = datetime.now()
         valid_from = now.strftime("%d-%m-%Y 13:30")
         last_day = calendar.monthrange(now.year, now.month)[1]
@@ -252,10 +274,9 @@ class PricingEngine:
             rows = []
             idx = 1
             for _, row in df_subset.iterrows():
-                c_id = city_dict.get(row.get('city_clean'), '')
-                s_id = spin_dict.get(row.get('item_code_str'), '')
+                c_id = city_dict.get(row.get('city_clean', ''), '')
+                s_id = spin_dict.get(row.get('item_code_str', ''), '')
                 
-                # Logic: OPP = Absolute Price, Branded = Percentage Discount
                 if is_opp:
                     disc_type = "FINAL_PRICE"
                     disc_val = int(round(row.get('Final Price', 0)))
@@ -279,8 +300,6 @@ class PricingEngine:
                 idx += 1
             return pd.DataFrame(rows)
 
-        # Generate
-        # Check for 'is_opp' flag, if not assume all are Branded/Standard
         if 'is_opp' in df_final.columns:
             opp_df = create_rows(df_final[df_final['is_opp'] == True], is_opp=True)
             brand_df = create_rows(df_final[df_final['is_opp'] == False], is_opp=False)
