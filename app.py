@@ -5,112 +5,40 @@ from pricing_model import run_pricing_model
 
 # Page config
 st.set_page_config(page_title="Pricing Model", page_icon="💰", layout="wide")
-st.title("💰 Pricing Model")
-st.write("Upload your data files to get pricing recommendations")
 
-# Create tabs for better organization
-tab1, tab2, tab3 = st.tabs([
-    "📥 Scraped Data Inputs", 
-    "🧮 Computation Inputs", 
-    "⚙️ Static Inputs"
-])
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .upload-section {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+    }
+    .stButton>button {
+        height: 3rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.5rem;
+    }
+    .section-header {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #0e1117;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("💰 Pricing Model")
 
 # Initialize session state for file uploads
 if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = {}
 
-# TAB 1: Scraped Data Inputs
-with tab1:
-    st.header("📥 Scraped Data Inputs")
-    st.write("Upload price data from various sources")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.subheader("IM Prices")
-        st.write("Internal Market pricing data")
-        im_prices = st.file_uploader("Upload IM Prices CSV", type=['csv'], key="im_prices")
-        if im_prices:
-            st.session_state.uploaded_files['im_prices'] = pd.read_csv(im_prices)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['im_prices'])} rows)")
-    
-    with col2:
-        st.subheader("Competition Prices")
-        st.write("Competitor pricing data")
-        comp_prices = st.file_uploader("Upload Competition Prices CSV", type=['csv'], key="comp_prices")
-        if comp_prices:
-            st.session_state.uploaded_files['comp_prices'] = pd.read_csv(comp_prices)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['comp_prices'])} rows)")
-    
-    with col3:
-        st.subheader("NECC Prices")
-        st.write("National Egg Co-ordination Committee pricing")
-        necc_prices = st.file_uploader("Upload NECC Prices CSV", type=['csv'], key="necc_prices")
-        if necc_prices:
-            st.session_state.uploaded_files['necc_prices'] = pd.read_csv(necc_prices)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['necc_prices'])} rows)")
-
-# TAB 2: Computation Inputs
-with tab2:
-    st.header("🧮 Computation Inputs")
-    st.write("Upload sales and inventory data for model computation")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 Sales Data")
-        st.write("Historical sales information")
-        sales_file = st.file_uploader("Upload Sales CSV", type=['csv'], key="sales")
-        if sales_file:
-            st.session_state.uploaded_files['sales'] = pd.read_csv(sales_file)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['sales'])} rows)")
-    
-    with col2:
-        st.subheader("📦 Stocks Data")
-        st.write("Required columns: `product_id`, `stock_level`")
-        stocks_file = st.file_uploader("Upload Stocks CSV", type=['csv'], key="stocks")
-        if stocks_file:
-            st.session_state.uploaded_files['stocks'] = pd.read_csv(stocks_file)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['stocks'])} rows)")
-
-# TAB 3: Static Inputs
-with tab3:
-    st.header("⚙️ Static Inputs")
-    st.info("💡 These files typically need to be uploaded once a month or when changes occur")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.subheader("💵 COGS Inputs")
-        st.write("Required columns: `product_id`, `product_name`, `cogs`")
-        cogs_file = st.file_uploader("Upload COGS CSV", type=['csv'], key="cogs")
-        if cogs_file:
-            st.session_state.uploaded_files['cogs'] = pd.read_csv(cogs_file)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['cogs'])} rows)")
-    
-    with col2:
-        st.subheader("🎯 Brand Aligned SDPO")
-        st.write("Discount by IM configuration")
-        sdpo_file = st.file_uploader("Upload SDPO CSV", type=['csv'], key="sdpo")
-        if sdpo_file:
-            st.session_state.uploaded_files['sdpo'] = pd.read_csv(sdpo_file)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['sdpo'])} rows)")
-    
-    with col3:
-        st.subheader("🚫 City Brand Exclusion List")
-        st.write("Excluded brands by city")
-        exclusion_file = st.file_uploader("Upload Exclusion List CSV", type=['csv'], key="exclusion")
-        if exclusion_file:
-            st.session_state.uploaded_files['exclusion'] = pd.read_csv(exclusion_file)
-            st.success(f"✓ Uploaded ({len(st.session_state.uploaded_files['exclusion'])} rows)")
-
-# Main action area
-st.divider()
-
-# Upload status overview
-st.subheader("📋 Upload Status")
-
-# Define all required files (all 8 files are required)
+# Define all required files
 all_required_files = [
     'im_prices', 'comp_prices', 'necc_prices',  # Scraped Data
     'sales', 'stocks',  # Computation Inputs
@@ -120,18 +48,98 @@ all_required_files = [
 uploaded_count = sum(1 for key in all_required_files if key in st.session_state.uploaded_files)
 is_ready = uploaded_count == len(all_required_files)
 
-status_cols = st.columns(2)
+# Top status bar and run button
+col_status1, col_status2, col_button = st.columns([1, 1, 2])
 
-with status_cols[0]:
-    st.metric("Total Files Uploaded", f"{uploaded_count}/{len(all_required_files)}")
+with col_status1:
+    st.metric("Files Uploaded", f"{uploaded_count}/{len(all_required_files)}")
 
-with status_cols[1]:
+with col_status2:
     st.metric("Status", "✅ Ready" if is_ready else "⏳ Pending")
+
+with col_button:
+    run_button = st.button("🚀 Run Pricing Model", type="primary", use_container_width=True, disabled=not is_ready)
 
 st.divider()
 
-# Run button
-if st.button("🚀 Run Pricing Model", type="primary", use_container_width=True, disabled=not is_ready):
+# Compact file upload sections
+st.markdown('<div class="section-header">📥 Scraped Data Inputs</div>', unsafe_allow_html=True)
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.caption("**IM Prices**")
+    im_prices = st.file_uploader("Upload CSV", type=['csv'], key="im_prices", label_visibility="collapsed")
+    if im_prices:
+        st.session_state.uploaded_files['im_prices'] = pd.read_csv(im_prices)
+        st.success(f"✓ {len(st.session_state.uploaded_files['im_prices'])} rows", icon="✅")
+
+with col2:
+    st.caption("**Competition Prices**")
+    comp_prices = st.file_uploader("Upload CSV", type=['csv'], key="comp_prices", label_visibility="collapsed")
+    if comp_prices:
+        st.session_state.uploaded_files['comp_prices'] = pd.read_csv(comp_prices)
+        st.success(f"✓ {len(st.session_state.uploaded_files['comp_prices'])} rows", icon="✅")
+
+with col3:
+    st.caption("**NECC Prices**")
+    necc_prices = st.file_uploader("Upload CSV", type=['csv'], key="necc_prices", label_visibility="collapsed")
+    if necc_prices:
+        st.session_state.uploaded_files['necc_prices'] = pd.read_csv(necc_prices)
+        st.success(f"✓ {len(st.session_state.uploaded_files['necc_prices'])} rows", icon="✅")
+
+st.divider()
+
+st.markdown('<div class="section-header">🧮 Computation Inputs</div>', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+
+with col1:
+    st.caption("**Sales Data**")
+    sales_file = st.file_uploader("Upload CSV", type=['csv'], key="sales", label_visibility="collapsed")
+    if sales_file:
+        st.session_state.uploaded_files['sales'] = pd.read_csv(sales_file)
+        st.success(f"✓ {len(st.session_state.uploaded_files['sales'])} rows", icon="✅")
+
+with col2:
+    st.caption("**Stocks Data**")
+    st.caption("_Required: product_id, stock_level_")
+    stocks_file = st.file_uploader("Upload CSV", type=['csv'], key="stocks", label_visibility="collapsed")
+    if stocks_file:
+        st.session_state.uploaded_files['stocks'] = pd.read_csv(stocks_file)
+        st.success(f"✓ {len(st.session_state.uploaded_files['stocks'])} rows", icon="✅")
+
+st.divider()
+
+st.markdown('<div class="section-header">⚙️ Static Inputs</div>', unsafe_allow_html=True)
+st.caption("_Upload monthly or when changes occur_")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.caption("**COGS Inputs**")
+    st.caption("_Required: product_id, product_name, cogs_")
+    cogs_file = st.file_uploader("Upload CSV", type=['csv'], key="cogs", label_visibility="collapsed")
+    if cogs_file:
+        st.session_state.uploaded_files['cogs'] = pd.read_csv(cogs_file)
+        st.success(f"✓ {len(st.session_state.uploaded_files['cogs'])} rows", icon="✅")
+
+with col2:
+    st.caption("**Brand Aligned SDPO**")
+    st.caption("_Discount by IM_")
+    sdpo_file = st.file_uploader("Upload CSV", type=['csv'], key="sdpo", label_visibility="collapsed")
+    if sdpo_file:
+        st.session_state.uploaded_files['sdpo'] = pd.read_csv(sdpo_file)
+        st.success(f"✓ {len(st.session_state.uploaded_files['sdpo'])} rows", icon="✅")
+
+with col3:
+    st.caption("**City Brand Exclusion List**")
+    exclusion_file = st.file_uploader("Upload CSV", type=['csv'], key="exclusion", label_visibility="collapsed")
+    if exclusion_file:
+        st.session_state.uploaded_files['exclusion'] = pd.read_csv(exclusion_file)
+        st.success(f"✓ {len(st.session_state.uploaded_files['exclusion'])} rows", icon="✅")
+
+st.divider()
+
+# Process when button is clicked
+if run_button:
     if not is_ready:
         st.error(f"⚠️ Please upload all {len(all_required_files)} required files before running the model")
     else:
@@ -181,34 +189,31 @@ if st.button("🚀 Run Pricing Model", type="primary", use_container_width=True,
         except Exception as e:
             st.error(f"❌ Error processing files: {str(e)}")
 
-# Add footer with instructions
-st.divider()
+# Footer with instructions
 with st.expander("ℹ️ How to use this tool"):
     st.markdown("""
-    ### Instructions:
+    ### Quick Start:
+    1. Upload all 8 required CSV files in their respective sections
+    2. Wait for status to show "✅ Ready" 
+    3. Click "🚀 Run Pricing Model" button at the top
+    4. Download your pricing recommendations
     
-    #### 1. **Scraped Data Inputs** (Required)
-    - **IM Prices**: Internal market pricing data
-    - **Competition Prices**: Competitor pricing information
-    - **NECC Prices**: National Egg Co-ordination Committee pricing
+    ### File Requirements:
     
-    #### 2. **Computation Inputs** (Required)
-    - **Sales Data**: Historical sales information
-    - **Stocks Data**: Current inventory levels (columns: `product_id`, `stock_level`)
+    **Scraped Data Inputs:**
+    - IM Prices, Competition Prices, NECC Prices
     
-    #### 3. **Static Inputs** (Required - Upload Monthly)
-    - **COGS Inputs**: Cost of goods sold (columns: `product_id`, `product_name`, `cogs`)
-    - **Brand Aligned SDPO**: Discount configuration by IM
-    - **City Brand Exclusion List**: Brands excluded by city
+    **Computation Inputs:**
+    - Sales Data
+    - Stocks Data (columns: `product_id`, `stock_level`)
     
-    #### 4. Run the Model
-    - Upload all 8 required files across the three tabs
-    - The "Run Pricing Model" button will be enabled once all files are uploaded
-    - Click to generate recommendations
-    - Download the results as CSV
+    **Static Inputs (Monthly):**
+    - COGS Inputs (columns: `product_id`, `product_name`, `cogs`)
+    - Brand Aligned SDPO
+    - City Brand Exclusion List
     
     ### Pricing Logic:
-    - **Low stock** (< 50 units): 40% markup
-    - **Medium stock** (50-200 units): 30% markup
-    - **High stock** (> 200 units): 20% markup
+    - Low stock (< 50): 40% markup
+    - Medium stock (50-200): 30% markup  
+    - High stock (> 200): 20% markup
     """)
