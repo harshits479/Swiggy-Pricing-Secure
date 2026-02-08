@@ -66,11 +66,8 @@ class PricingEngine:
         if df is None or df.empty: return df
         df = df.copy()
         
-        # 1. Clean whitespace from column names
         df.columns = [str(c).strip() for c in df.columns]
         
-        # 2. Define Mapping (Target Name -> List of possible input names)
-        # using lowercase for matching
         mapping_logic = {
             'Item Code': ['product_id', 'item_code', 'item code', 'sku', 'sku_id', 'article_id', 'material', 'item_id'],
             'City': ['city', 'city_name', 'location'],
@@ -83,7 +80,6 @@ class PricingEngine:
             'Sensitivity Score': ['price_sensitivity_score', 'sensitivity_score', 'price senstitivity', 'elasticity']
         }
         
-        # 3. Apply Mapping
         new_names = {}
         for col in df.columns:
             col_lower = col.lower()
@@ -98,40 +94,29 @@ class PricingEngine:
     def normalize_im_data(self, df_im):
         print("📊 Normalizing IM UOM...")
         df = self._standardize_cols(df_im)
-        
-        # Ensure UOM column exists
         if 'UOM' not in df.columns: df['UOM'] = ''
         if 'Item Name' not in df.columns: df['Item Name'] = ''
-
-        df['Normalized_UOM'] = df.apply(
-            lambda row: self.normalizer.normalize(row['UOM'], row['Item Name']), axis=1
-        )
+        df['Normalized_UOM'] = df.apply(lambda row: self.normalizer.normalize(row['UOM'], row['Item Name']), axis=1)
         return df
     
     def normalize_comp_data(self, df_comp):
         print("📊 Normalizing Competition UOM...")
         df = self._standardize_cols(df_comp)
-        
         if 'UOM' not in df.columns: df['UOM'] = ''
         if 'Item Name' not in df.columns: df['Item Name'] = ''
-        
-        df['Normalized_UOM'] = df.apply(
-            lambda row: self.normalizer.normalize(row['UOM'], row['Item Name']), axis=1
-        )
+        df['Normalized_UOM'] = df.apply(lambda row: self.normalizer.normalize(row['UOM'], row['Item Name']), axis=1)
         return df
     
     def matching_engine(self, df_im_norm, df_comp_norm, df_necc):
         print("🔗 Running Matching Engine...")
         df_im = df_im_norm.copy()
         
-        # Match with Competition
         if not df_comp_norm.empty and 'Selling Price' in df_comp_norm.columns:
             comp_price_map = df_comp_norm.groupby('Normalized_UOM')['Selling Price'].mean().to_dict()
             df_im['comp_avg_price'] = df_im['Normalized_UOM'].map(comp_price_map)
         else:
             df_im['comp_avg_price'] = np.nan
         
-        # Match with NECC
         if df_necc is not None:
             df_necc = self._standardize_cols(df_necc)
             if 'UOM' in df_necc.columns and 'Price' in df_necc.columns:
@@ -146,12 +131,10 @@ class PricingEngine:
         
         df = df_matched.copy()
         
-        # Standardize Inputs
         df_cogs = self._standardize_cols(df_cogs)
         df_stock = self._standardize_cols(df_stock)
         df_sdpo = self._standardize_cols(df_sdpo)
 
-        # Merge COGS
         if 'Item Code' in df.columns and 'Item Code' in df_cogs.columns:
             df['Item Code'] = df['Item Code'].astype(str)
             df_cogs['Item Code'] = df_cogs['Item Code'].astype(str)
@@ -161,38 +144,28 @@ class PricingEngine:
             df['COGS'] = 0
             print("⚠️ Warning: COGS merge failed. Check Item Code columns.")
 
-        # Merge Stock
         if df_stock is not None and 'Item Code' in df.columns and 'Item Code' in df_stock.columns:
             df_stock['Item Code'] = df_stock['Item Code'].astype(str)
             df = df.merge(df_stock[['Item Code', 'Stock Level']], on='Item Code', how='left')
         
-        # Base Price Calculation
         df['base_price'] = df['COGS'] * (1 + target_margin / 100)
         
-        # Competitive Logic
         df['comp_factor'] = 1.0
         if 'comp_avg_price' in df.columns:
              mask = (df['comp_avg_price'] > 0) & (df['base_price'] > df['comp_avg_price'] * 1.2)
              df.loc[mask, 'comp_factor'] = 0.95 
         
-        # Stock Logic
         if 'Stock Level' in df.columns:
             df['stock_factor'] = df['Stock Level'].apply(lambda x: 1.05 if x < 50 else (0.95 if x > 200 else 1.0))
         else:
             df['stock_factor'] = 1.0
             
-        # Final Modeled Price
         df['modeled_price'] = df['base_price'] * df['comp_factor'] * df['stock_factor']
         
-        # --- FIXED SDPO BLOCK ---
         if df_sdpo is not None and not df_sdpo.empty:
-             # Check if standardization worked
              if 'Item Code' in df_sdpo.columns:
                  df_sdpo['Item Code'] = df_sdpo['Item Code'].astype(str)
                  df = df.merge(df_sdpo, on='Item Code', how='left', suffixes=('', '_sdpo'))
-             else:
-                 print(f"⚠️ Warning: SDPO file uploaded but could not find 'Item Code'. Found columns: {list(df_sdpo.columns)}")
-        # ------------------------
         
         df['Final Price'] = df['modeled_price'].round(2)
         df['category'] = category
@@ -209,32 +182,53 @@ class PricingEngine:
         mask = df['Final Price'] > 0
         df.loc[mask, 'net_margin'] = ((df.loc[mask, 'Final Price'] - df.loc[mask, 'COGS']) / df.loc[mask, 'Final Price'] * 100).round(2)
         
-        # Price Index
-        df['price_index'] = 100.0
-        if 'comp_avg_price' in df.columns:
-            mask = df['comp_avg_price'] > 0
-            df.loc[mask, 'price_index'] = (df.loc[mask, 'Final Price'] / df.loc[mask, 'comp_avg_price'] * 100).round(2)
-
-        # GMV Goodness (Sensitivity)
+        # GMV Goodness Calculation (Actual Uplift %)
         df_sens = self._standardize_cols(df_price_sensitivity)
-        df['gmv_goodness'] = 0.0
+        df['gmv_uplift_pct'] = 0.0
         
+        # We need Elasticity (Sensitivity) and Old Price (Selling Price)
         if df_sens is not None and not df_sens.empty:
             if 'Item Code' in df_sens.columns:
                 df_sens['Item Code'] = df_sens['Item Code'].astype(str)
                 df['Item Code'] = df['Item Code'].astype(str)
+                # Average elasticity per item
+                df_sens_unique = df_sens.groupby('Item Code')['Sensitivity Score'].mean().reset_index()
+                df = df.merge(df_sens_unique, on='Item Code', how='left')
                 
-                # Group by Item Code to avoid duplicates if sensitivity file has daily data
-                # Assuming simple average sensitivity for the summary
-                if 'Sensitivity Score' in df_sens.columns:
-                    df_sens_unique = df_sens.groupby('Item Code')['Sensitivity Score'].mean().reset_index()
-                    df = df.merge(df_sens_unique, on='Item Code', how='left')
-                    df['gmv_goodness'] = df['Sensitivity Score'].fillna(0)
+                # Default elasticity if missing
+                df['Sensitivity Score'] = df['Sensitivity Score'].fillna(-1.0)
+                
+                # Formula:
+                # % Price Change = (New - Old) / Old
+                # % Vol Change = Elasticity * % Price Change
+                # New Vol = 1 * (1 + % Vol Change)  [Assuming Base Vol = 1 for % calculation]
+                # Old GMV = Old Price * 1
+                # New GMV = New Price * New Vol
+                # % GMV Uplift = (New GMV - Old GMV) / Old GMV * 100
+                
+                # Ensure we have Selling Price (Old Price)
+                if 'Selling Price' not in df.columns:
+                    # Fallback if Selling Price missing: use COGS + 10% as dummy old price
+                    df['Selling Price'] = df['COGS'] * 1.10
+                
+                # Avoid div/0
+                df['Selling Price'] = df['Selling Price'].replace(0, df['COGS'] * 1.10)
+                
+                df['pct_price_change'] = (df['Final Price'] - df['Selling Price']) / df['Selling Price']
+                df['pct_vol_change'] = df['Sensitivity Score'] * df['pct_price_change']
+                df['new_vol_proxy'] = 1 * (1 + df['pct_vol_change'])
+                
+                df['old_gmv_proxy'] = df['Selling Price'] * 1
+                df['new_gmv_proxy'] = df['Final Price'] * df['new_vol_proxy']
+                
+                df['gmv_uplift_pct'] = ((df['new_gmv_proxy'] - df['old_gmv_proxy']) / df['old_gmv_proxy'] * 100).fillna(0)
+
+        # Average of the percentages
+        avg_uplift = df['gmv_uplift_pct'].mean()
 
         summary = {
             'avg_net_margin': df['net_margin'].mean(),
-            'avg_price_index': df['price_index'].mean(),
-            'avg_gmv_goodness': df['gmv_goodness'].mean(),
+            'avg_gmv_uplift': avg_uplift,
             'total_products': len(df)
         }
         return df, summary
@@ -245,7 +239,6 @@ class PricingEngine:
         city_mapping = self._standardize_cols(city_mapping)
         spin_mapping = self._standardize_cols(spin_mapping)
         
-        # Mappings
         if 'City' in city_mapping.columns:
             city_mapping['city_clean'] = city_mapping['City'].astype(str).str.lower().str.strip()
             city_dict = city_mapping.drop_duplicates('city_clean').set_index('city_clean')['CITY_ID'].to_dict()
@@ -258,7 +251,6 @@ class PricingEngine:
         else:
             spin_dict = {}
         
-        # Prepare DF
         if 'City' in df_final.columns:
             df_final['city_clean'] = df_final['City'].astype(str).str.lower().str.strip()
         else:
@@ -319,22 +311,12 @@ def run_pricing_model(im_pricing, comp_pricing, necc_pricing, cogs_df, sdpo_df,
                       target_margin, category):
     
     engine = PricingEngine()
-    
-    # 1. Normalize
     df_im_norm = engine.normalize_im_data(im_pricing)
     df_comp_norm = engine.normalize_comp_data(comp_pricing)
-    
-    # 2. Match
     df_matched = engine.matching_engine(df_im_norm, df_comp_norm, necc_pricing)
-    
-    # 3. Price
     df_priced = engine.pricing_engine(df_matched, cogs_df, sdpo_df, stock_insights, 
                                       gmv_weights, exclusions, target_margin, category)
-    
-    # 4. Report
     df_final, summary = engine.performance_reporting(df_priced, price_sensitivity, gmv_weights)
-    
-    # 5. Upload Files
     opp_upload, branded_upload = engine.generate_upload_files(df_final, city_mapping, spin_mapping)
     
     return df_final, summary, opp_upload, branded_upload
