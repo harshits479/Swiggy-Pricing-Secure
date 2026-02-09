@@ -183,8 +183,15 @@ class PricingEngine:
         
         # Apply SDPO (Brand Aligned Discount)
         if df_sdpo is not None and len(df_sdpo) > 0:
-            # Merge SDPO data
-            df = df.merge(df_sdpo, on='ITEM_CODE', how='left', suffixes=('', '_sdpo'))
+            # Check if SDPO has Brand column (brand-level discounts)
+            if 'Brand' in df_sdpo.columns and 'Hardcoded_SDPO' in df_sdpo.columns:
+                # Brand-level SDPO - need to map products to brands first
+                # For now, skip SDPO merge as we don't have brand mapping
+                print("ℹ️ SDPO file has brand-level discounts. Brand-to-product mapping needed.")
+                pass
+            elif 'ITEM_CODE' in df_sdpo.columns:
+                # Item-level SDPO - direct merge
+                df = df.merge(df_sdpo, on='ITEM_CODE', how='left', suffixes=('', '_sdpo'))
         
         # Round to 2 decimals
         df['Final Price'] = df['modeled_price'].round(2)
