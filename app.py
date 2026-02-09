@@ -254,6 +254,79 @@ if st.session_state.gdrive_authenticated:
     - `stock_insights.csv`
     - `city_brand_exclusion_list.csv`
     """)
+    
+    # ==================== DEBUGGING SECTION ====================
+    with st.expander("🔍 Debug Google Drive Connection", expanded=False):
+        st.write("Use this section to troubleshoot Google Drive access issues.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📂 List Available Folders", use_container_width=True):
+                with st.spinner("Fetching folders..."):
+                    folders = st.session_state.gdrive_loader.list_all_folders()
+                    if folders:
+                        st.success(f"✅ Found {len(folders)} folders accessible to your service account:")
+                        folder_list = [f"• **{f['name']}** (ID: `{f['id']}`)" for f in folders[:30]]
+                        st.markdown("\n".join(folder_list))
+                        
+                        # Check if Pricing Inputs exists
+                        pricing_folder = [f for f in folders if f['name'].lower() == 'pricing inputs']
+                        if pricing_folder:
+                            st.success(f"✅ 'Pricing Inputs' folder found with ID: `{pricing_folder[0]['id']}`")
+                        else:
+                            st.error("❌ 'Pricing Inputs' folder not found in the list above!")
+                            st.info("💡 Make sure to share the folder with your service account email.")
+                    else:
+                        st.warning("⚠️ No folders found. Check service account permissions.")
+                        st.info("""
+                        **Possible reasons:**
+                        1. Service account doesn't have access to any folders
+                        2. You need to share folders with your service account email
+                        3. The credentials might be incorrect
+                        """)
+        
+        with col2:
+            folder_name_input = st.text_input("🔍 Test Folder Name", value="Pricing Inputs")
+            if st.button("🔎 Check Folder Access", use_container_width=True):
+                with st.spinner(f"Searching for folder '{folder_name_input}'..."):
+                    folder_id = st.session_state.gdrive_loader.find_folder(folder_name_input)
+                    if folder_id:
+                        st.success(f"✅ Found folder with ID: `{folder_id}`")
+                        
+                        # List files in the folder
+                        with st.spinner("Fetching files in folder..."):
+                            files = st.session_state.gdrive_loader.list_files_in_folder(folder_id)
+                            if files:
+                                st.success(f"📄 Found {len(files)} files in folder:")
+                                file_list = [f"• **{f['name']}** (Type: {f.get('mimeType', 'unknown')})" for f in files]
+                                st.markdown("\n".join(file_list))
+                            else:
+                                st.warning("⚠️ Folder is empty or no files found.")
+                    else:
+                        st.error(f"❌ Folder '{folder_name_input}' not found")
+                        st.info("""
+                        **What to do:**
+                        1. Click 'List Available Folders' to see what's accessible
+                        2. Make sure the folder name matches exactly
+                        3. Share the folder with your service account email
+                        """)
+        
+        # Service account info
+        st.markdown("---")
+        st.markdown("**📧 Service Account Information**")
+        if "google" in st.secrets:
+            service_account_email = st.secrets["google"].get("client_email", "Not found")
+            st.code(f"Service Account Email: {service_account_email}", language="text")
+            st.info(f"💡 Share your 'Pricing Inputs' folder with this email: `{service_account_email}`")
+        else:
+            st.warning("⚠️ Service account credentials not found in secrets.")
+            st.info("""
+            **To configure:**
+            1. Go to Streamlit Cloud dashboard
+            2. Navigate to your app settings
+            3. Add secrets in TOML format with your Google Service Account JSON
+            """)
 else:
     st.info("""
     📁 **Manual Upload Mode**: Upload all required files below.
@@ -390,6 +463,12 @@ if run_button:
                 # Validate that we have minimum required files
                 if file_paths.get('im_pricing') is None or file_paths.get('comp_pricing') is None:
                     st.error("❌ Missing required files: IM Pricing and Competition Pricing must be available")
+                    st.info("""
+                    **What to do:**
+                    1. Check the Debug section above to verify Google Drive access
+                    2. Make sure files exist in your 'Pricing Inputs' folder
+                    3. Verify file names match exactly (case-sensitive)
+                    """)
                     st.stop()
                 
                 # Run the complete pricing model
