@@ -300,6 +300,13 @@ if run_button:
             # Load SDPO if available
             sdpo_df = uploaded_files.get('sdpo', None)
             
+            # Check SDPO format and inform user
+            if sdpo_df is not None:
+                if 'Brand' in sdpo_df.columns and 'Hardcoded_SDPO' in sdpo_df.columns:
+                    st.info("ℹ️ Brand-level SDPO file detected. Note: Brand-to-product mapping is needed for full SDPO application.")
+                elif 'ITEM_CODE' not in sdpo_df.columns:
+                    st.warning("⚠️ SDPO file should have either 'Brand' or 'ITEM_CODE' column for proper matching.")
+            
             # Validate COGS file columns
             required_cogs_cols = ['product_id', 'COGS']
             if not all(col in cogs_df.columns for col in required_cogs_cols):
