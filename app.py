@@ -1,7 +1,7 @@
 # app.py
 import streamlit as st
 import pandas as pd
-from pricing_model import run_pricing_model
+from pricing_model_complete import run_complete_pricing_model
 import io
 
 # Page config
@@ -116,10 +116,6 @@ if 'model_run' not in st.session_state:
     st.session_state.model_run = False
 if 'summary' not in st.session_state:
     st.session_state.summary = None
-if 'opp_upload' not in st.session_state:
-    st.session_state.opp_upload = None
-if 'branded_upload' not in st.session_state:
-    st.session_state.branded_upload = None
 
 # ==================== INSTRUCTIONS (Collapsible) ====================
 with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=False):
@@ -300,23 +296,12 @@ if run_button:
             # Load SDPO if available
             sdpo_df = uploaded_files.get('sdpo', None)
             
-            # Check SDPO format and inform user
-            if sdpo_df is not None:
-                if 'Brand' in sdpo_df.columns and 'Hardcoded_SDPO' in sdpo_df.columns:
-                    st.info("ℹ️ Brand-level SDPO file detected. Note: Brand-to-product mapping is needed for full SDPO application.")
-                elif 'ITEM_CODE' not in sdpo_df.columns:
-                    st.warning("⚠️ SDPO file should have either 'Brand' or 'ITEM_CODE' column for proper matching.")
-            
             # Validate COGS file columns
             required_cogs_cols = ['product_id', 'COGS']
             if not all(col in cogs_df.columns for col in required_cogs_cols):
                 st.error(f"❌ COGS file must contain columns: {', '.join(required_cogs_cols)}")
                 st.error(f"Found columns: {', '.join(cogs_df.columns.tolist())}")
                 st.stop()
-            
-            # For demo, create dummy data for required inputs
-            # In production, replace with actual Google Drive fetch
-            st.info("🔄 In production mode, files will be automatically fetched from Google Drive folder 'Pricing Inputs'")
             
             # Prepare COGS data - create product_name if missing
             if 'product_name' not in cogs_df.columns:
@@ -326,75 +311,46 @@ if run_button:
             if 'COGS' in cogs_df.columns and 'cogs' not in cogs_df.columns:
                 cogs_df['cogs'] = cogs_df['COGS']
             
-            # Dummy data for demonstration
-            df_im = pd.DataFrame({
-                'ITEM_CODE': cogs_df['product_id'].values[:min(100, len(cogs_df))],
-                'ITEM_NAME': cogs_df['product_name'].values[:min(100, len(cogs_df))],
-                'uom': ['10_pieces'] * min(100, len(cogs_df)),
-                'MRP': [100] * min(100, len(cogs_df)),
-                'CITY': cogs_df['CITY'].values[:min(100, len(cogs_df))] if 'CITY' in cogs_df.columns else ['bangalore'] * min(100, len(cogs_df))
-            })
+            # Save uploaded files temporarily
+            import tempfile
+            import os
             
-            df_comp = pd.DataFrame({
-                'product_name': cogs_df['product_name'].values[:min(50, len(cogs_df))],
-                'uom': ['10_pieces'] * min(50, len(cogs_df)),
-                'selling_price': [95] * min(50, len(cogs_df))
-            })
-            
-            df_necc = pd.DataFrame({
-                'UOM': ['10_pieces', '30_pieces'],
-                'Price': [85, 250]
-            })
-            
-            df_stock = pd.DataFrame({
-                'ITEM_CODE': cogs_df['product_id'].values[:min(100, len(cogs_df))],
-                'stock_level': [100] * min(100, len(cogs_df))
-            })
-            
-            df_gmv = pd.DataFrame({
-                'category': [selected_category],
-                'weight': [1.0]
-            })
-            
-            df_sensitivity = pd.DataFrame({
-                'item_code': cogs_df['product_id'].values[:min(100, len(cogs_df))],
-                'price_sensitivity_score': [50] * min(100, len(cogs_df))
-            })
-            
-            city_mapping = pd.DataFrame({
-                'CITY': ['Bangalore', 'bangalore', 'Delhi', 'Mumbai'],
-                'CITY_ID': [1, 1, 2, 3]
-            })
-            
-            spin_mapping = pd.DataFrame({
-                'item_code': cogs_df['product_id'].values[:min(100, len(cogs_df))],
-                'spin_id': range(1, min(101, len(cogs_df) + 1))
-            })
-            
-            exclusions = pd.DataFrame()
-            
-            # Run the pricing model
-            results_df, summary, opp_upload, branded_upload = run_pricing_model(
-                im_pricing=df_im,
-                comp_pricing=df_comp,
-                necc_pricing=df_necc,
-                cogs_df=cogs_df,
-                sdpo_df=sdpo_df,
-                stock_insights=df_stock,
-                gmv_weights=df_gmv,
-                price_sensitivity=df_sensitivity,
-                city_mapping=city_mapping,
-                spin_mapping=spin_mapping,
-                exclusions=exclusions,
-                target_margin=target_margin,
-                category=selected_category
-            )
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Save COGS
+                cogs_path = os.path.join(tmpdir, 'cogs.csv')
+                cogs_df.to_csv(cogs_path, index=False)
+                
+                # Save SDPO if available
+                sdpo_path = None
+                if sdpo_df is not None:
+                    sdpo_path = os.path.join(tmpdir, 'sdpo.csv')
+                    sdpo_df.to_csv(sdpo_path, index=False)
+                
+                # Use the actual uploaded files from /mnt/user-data/uploads
+                im_pricing_path = '/mnt/user-data/uploads/eggs_im_pricing.csv'
+                comp_pricing_path = '/mnt/user-data/uploads/eggs_pricing_comp.csv'
+                necc_pricing_path = '/mnt/user-data/uploads/necc_egg_prices_cleaned.csv'
+                stock_path = '/mnt/user-data/uploads/stock_insights.csv'
+                gmv_path = '/mnt/user-data/uploads/gmv_weights.csv'
+                exclusion_path = '/mnt/user-data/uploads/city_brand_exclusion_list.csv'
+                
+                # Run the complete pricing model
+                results_df, summary = run_complete_pricing_model(
+                    im_pricing_file=im_pricing_path,
+                    comp_pricing_file=comp_pricing_path,
+                    necc_pricing_file=necc_pricing_path,
+                    cogs_file=cogs_path,
+                    sdpo_file=sdpo_path,
+                    stock_file=stock_path,
+                    gmv_file=gmv_path,
+                    exclusion_file=exclusion_path,
+                    target_margin=target_margin,
+                    category=selected_category
+                )
             
             # Store in session state
             st.session_state.results_df = results_df
             st.session_state.summary = summary
-            st.session_state.opp_upload = opp_upload
-            st.session_state.branded_upload = branded_upload
             st.session_state.model_run = True
     
     except Exception as e:
@@ -406,10 +362,8 @@ if run_button:
 if st.session_state.model_run and st.session_state.results_df is not None:
     results_df = st.session_state.results_df
     summary = st.session_state.summary
-    opp_upload = st.session_state.opp_upload
-    branded_upload = st.session_state.branded_upload
     
-    st.success(f"✅ Pricing model completed successfully! Generated {len(results_df):,} recommendations", icon="🎉")
+    st.success(f"✅ Model completed! Generated {len(results_df):,} prices")
     
     # Performance Metrics
     st.markdown('<div class="upload-card"><div class="section-title">📊 Performance Metrics</div>', unsafe_allow_html=True)
@@ -440,49 +394,16 @@ if st.session_state.model_run and st.session_state.results_df is not None:
         hide_index=True
     )
     
-    # Download Buttons
-    st.markdown("### 📥 Download Files")
+    # Download Button
+    st.markdown("### 📥 Download Modeled Prices")
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Modeled Prices CSV
-        csv = results_df.to_csv(index=False)
-        st.download_button(
-            label="📊 DOWNLOAD MODELED PRICES",
-            data=csv,
-            file_name=f"modeled_prices_{selected_category.replace(' ', '_').lower()}.csv",
-            mime="text/csv",
-            use_container_width=True,
-            type="secondary"
-        )
-    
-    with col2:
-        # OPP Upload File
-        if opp_upload is not None and len(opp_upload) > 0:
-            opp_csv = opp_upload.to_csv(index=False)
-            st.download_button(
-                label="📤 OPP UPLOAD FILE",
-                data=opp_csv,
-                file_name=f"opp_prices_upload_{selected_category.replace(' ', '_').lower()}.csv",
-                mime="text/csv",
-                use_container_width=True,
-                type="secondary"
-            )
-        else:
-            st.info("No OPP products")
-    
-    with col3:
-        # Branded Upload File
-        if branded_upload is not None and len(branded_upload) > 0:
-            branded_csv = branded_upload.to_csv(index=False)
-            st.download_button(
-                label="📤 BRANDED UPLOAD FILE",
-                data=branded_csv,
-                file_name=f"branded_prices_upload_{selected_category.replace(' ', '_').lower()}.csv",
-                mime="text/csv",
-                use_container_width=True,
-                type="secondary"
-            )
-        else:
-            st.info("No branded products")
+    # Modeled Prices CSV
+    csv = results_df.to_csv(index=False)
+    st.download_button(
+        label="📊 DOWNLOAD MODELED PRICES (CSV)",
+        data=csv,
+        file_name=f"modeled_prices_{selected_category.replace(' ', '_').lower()}.csv",
+        mime="text/csv",
+        use_container_width=True,
+        type="primary"
+    )
