@@ -129,8 +129,8 @@ with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=Fa
     **Step 1:** Select the product category from the dropdown  
     **Step 2:** Set your target Net Margin (NM) percentage  
     **Step 3:** Upload required files:
-    - **COGS Data** (Required)
-    - **Brand Aligned Discount** (Optional)
+    - **COGS Data** (Required: `product_id`, `COGS`, `CITY`)
+    - **Brand Aligned Discount** (Optional: `Brand`, `Hardcoded_SDPO`)
     
     **Step 4:** Click "Run Pricing Model" button  
     **Step 5:** Review performance metrics and download files
@@ -147,6 +147,28 @@ with st.expander("📖 **HOW TO USE** - Click to view instructions", expanded=Fa
     - City ID Mapping (`city_id_mapping.csv`)
     - SPIN ID Mapping (`spin_id_mapping.csv`)
     - Price Sensitivity (`price_sensitivity.csv`)
+    
+    ### File Format Requirements
+    
+    **COGS File:**
+    - Columns: `product_id`, `COGS`, `CITY`
+    - Format: CSV
+    - Example:
+      ```
+      product_id,CITY,COGS
+      558087,lonavla,187.5
+      78360,amritsar,56.5
+      ```
+    
+    **Brand Aligned SDPO (Optional):**
+    - Columns: `Brand`, `Hardcoded_SDPO`
+    - Format: CSV with percentage values
+    - Example:
+      ```
+      Brand,Hardcoded_SDPO
+      Eggoz,4%
+      Keggs,5%
+      ```
     
     ### Outputs
     
@@ -236,14 +258,14 @@ st.markdown('<div class="upload-card"><div class="section-title">📥 Upload Dat
 col1, col2 = st.columns(2)
 
 with col1:
-    st.caption("**COGS Data** _(Required: product_id, product_name, cogs)_")
+    st.caption("**COGS Data** _(Required: product_id, COGS, CITY)_")
     cogs_file = st.file_uploader("COGS", type=['csv'], key="cogs", label_visibility="collapsed")
     if cogs_file:
         uploaded_files['cogs'] = pd.read_csv(cogs_file)
         st.success(f"✓ {len(uploaded_files['cogs']):,} rows uploaded")
 
 with col2:
-    st.caption("**Brand Aligned Discount (SDPO)** _(Optional)_")
+    st.caption("**Brand Aligned Discount (SDPO)** _(Optional: Brand, Hardcoded_SDPO)_")
     sdpo_file = st.file_uploader("SDPO", type=['csv'], key="sdpo", label_visibility="collapsed")
     if sdpo_file:
         uploaded_files['sdpo'] = pd.read_csv(sdpo_file)
@@ -278,9 +300,24 @@ if run_button:
             # Load SDPO if available
             sdpo_df = uploaded_files.get('sdpo', None)
             
+            # Validate COGS file columns
+            required_cogs_cols = ['product_id', 'COGS']
+            if not all(col in cogs_df.columns for col in required_cogs_cols):
+                st.error(f"❌ COGS file must contain columns: {', '.join(required_cogs_cols)}")
+                st.error(f"Found columns: {', '.join(cogs_df.columns.tolist())}")
+                st.stop()
+            
             # For demo, create dummy data for required inputs
             # In production, replace with actual Google Drive fetch
             st.info("🔄 In production mode, files will be automatically fetched from Google Drive folder 'Pricing Inputs'")
+            
+            # Prepare COGS data - create product_name if missing
+            if 'product_name' not in cogs_df.columns:
+                cogs_df['product_name'] = 'Product ' + cogs_df['product_id'].astype(str)
+            
+            # Standardize COGS column name
+            if 'COGS' in cogs_df.columns and 'cogs' not in cogs_df.columns:
+                cogs_df['cogs'] = cogs_df['COGS']
             
             # Dummy data for demonstration
             df_im = pd.DataFrame({
@@ -288,7 +325,7 @@ if run_button:
                 'ITEM_NAME': cogs_df['product_name'].values[:min(100, len(cogs_df))],
                 'uom': ['10_pieces'] * min(100, len(cogs_df)),
                 'MRP': [100] * min(100, len(cogs_df)),
-                'CITY': ['bangalore'] * min(100, len(cogs_df))
+                'CITY': cogs_df['CITY'].values[:min(100, len(cogs_df))] if 'CITY' in cogs_df.columns else ['bangalore'] * min(100, len(cogs_df))
             })
             
             df_comp = pd.DataFrame({
