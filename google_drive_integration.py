@@ -39,20 +39,47 @@ class GoogleDriveLoader:
             st.error(f"❌ Authentication failed: {e}")
             return False
     
-    def find_folder(self, folder_name):
-        """Find folder ID by name"""
+    def list_all_folders(self):
+        """List all folders accessible to the service account (for debugging)"""
         try:
+            query = "mimeType='application/vnd.google-apps.folder' and trashed=false"
+            results = self.service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name, parents)',
+                pageSize=100
+            ).execute()
+            
+            items = results.get('files', [])
+            return items
+            
+        except Exception as e:
+            st.error(f"Error listing folders: {e}")
+            return []
+    
+    def find_folder(self, folder_name):
+        """Find folder ID by name (case-insensitive search)"""
+        try:
+            # First try exact match
             query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
             results = self.service.files().list(
                 q=query,
                 spaces='drive',
-                fields='files(id, name)'
+                fields='files(id, name, parents)',
+                pageSize=10
             ).execute()
             
             items = results.get('files', [])
-            if not items:
-                return None
-            return items[0]['id']
+            if items:
+                return items[0]['id']
+            
+            # If not found, try case-insensitive search
+            all_folders = self.list_all_folders()
+            for folder in all_folders:
+                if folder['name'].lower() == folder_name.lower():
+                    return folder['id']
+            
+            return None
             
         except Exception as e:
             st.error(f"Error finding folder: {e}")
@@ -65,17 +92,51 @@ class GoogleDriveLoader:
             results = self.service.files().list(
                 q=query,
                 spaces='drive',
-                fields='files(id, name, mimeType)'
+                fields='files(id, name, mimeType)',
+                pageSize=10
             ).execute()
             
             items = results.get('files', [])
-            if not items:
-                return None
-            return items[0]['id']
+            if items:
+                return items[0]['id']
+            
+            # Try case-insensitive search
+            query = f"'{folder_id}' in parents and trashed=false"
+            results = self.service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name, mimeType)',
+                pageSize=100
+            ).execute()
+            
+            items = results.get('files', [])
+            for item in items:
+                if item['name'].lower() == file_name.lower():
+                    return item['id']
+            
+            return None
             
         except Exception as e:
             st.error(f"Error finding file: {e}")
             return None
+    
+    def list_files_in_folder(self, folder_id):
+        """List all files in a folder (for debugging)"""
+        try:
+            query = f"'{folder_id}' in parents and trashed=false"
+            results = self.service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name, mimeType)',
+                pageSize=100
+            ).execute()
+            
+            items = results.get('files', [])
+            return items
+            
+        except Exception as e:
+            st.error(f"Error listing files: {e}")
+            return []
     
     def download_file(self, file_id):
         """Download file content as bytes"""
@@ -101,13 +162,25 @@ class GoogleDriveLoader:
             # Find folder
             folder_id = self.find_folder(folder_name)
             if not folder_id:
-                st.warning(f"Folder '{folder_name}' not found")
+                # Debug: List all available folders
+                st.warning(f"⚠️ Folder '{folder_name}' not found. Listing available folders:")
+                all_folders = self.list_all_folders()
+                if all_folders:
+                    folder_names = [f"  • {f['name']}" for f in all_folders[:10]]
+                    st.code("\n".join(folder_names))
+                else:
+                    st.warning("No folders found. Make sure the service account has access to the folder.")
                 return None
             
             # Find file
             file_id = self.find_file_in_folder(folder_id, file_name)
             if not file_id:
-                st.warning(f"File '{file_name}' not found in folder '{folder_name}'")
+                # Debug: List all files in folder
+                st.warning(f"⚠️ File '{file_name}' not found. Files in folder '{folder_name}':")
+                files_in_folder = self.list_files_in_folder(folder_id)
+                if files_in_folder:
+                    file_names = [f"  • {f['name']}" for f in files_in_folder[:20]]
+                    st.code("\n".join(file_names))
                 return None
             
             # Download file
@@ -121,4 +194,6 @@ class GoogleDriveLoader:
             
         except Exception as e:
             st.error(f"Error loading file '{file_name}': {e}")
+            import traceback
+            st.code(traceback.format_exc())
             return None
